@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -334,9 +335,10 @@ func (s *Service) CreateAPIKey(ctx context.Context, teamID uuid.UUID, userID *uu
 	var expiresAt *time.Time
 	if req.ExpiresAt != nil {
 		t, err := time.Parse(time.RFC3339, *req.ExpiresAt)
-		if err == nil {
-			expiresAt = &t
+		if err != nil {
+			return nil, fmt.Errorf("invlid expiration date format: %w", err)
 		}
+		expiresAt = &t
 	}
 
 	apiKey := &APIKey{

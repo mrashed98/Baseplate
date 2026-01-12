@@ -175,10 +175,8 @@ CREATE TABLE audit_logs (
     new_data JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
+Ø
 -- Indexes
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_teams_slug ON teams(slug);
 CREATE INDEX idx_team_memberships_user ON team_memberships(user_id);
 CREATE INDEX idx_team_memberships_team ON team_memberships(team_id);
 CREATE INDEX idx_api_keys_team ON api_keys(team_id);
@@ -195,3 +193,6 @@ CREATE INDEX idx_actions_team ON actions(team_id);
 CREATE INDEX idx_audit_logs_team ON audit_logs(team_id);
 CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
+CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
+CREATE INDEX idx_integration_mappings_integration_id ON integration_mappings(integration_id);
+CREATE INDEX idx_scorecards_rules_scorecard_id ON scorecard_rules(scorecard_id);

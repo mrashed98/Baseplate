@@ -149,7 +149,9 @@ func (r *Repository) GetRoleByID(ctx context.Context, id uuid.UUID) (*Role, erro
 	if err != nil {
 		return nil, err
 	}
-	json.Unmarshal(permissions, &role.Permissions)
+	if err := json.Unmarshal(permissions, &role.Permissions); err != nil {
+		return nil, err
+	}
 	return role, nil
 }
 

@@ -28,10 +28,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	resp, err := h.authService.Register(c.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserExists) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": "User already Exist"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
 
@@ -48,10 +48,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	resp, err := h.authService.Login(c.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
 	if user == nil {

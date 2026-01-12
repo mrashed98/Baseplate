@@ -56,7 +56,9 @@ func (r *Repository) GetByID(ctx context.Context, teamID uuid.UUID, id string) (
 
 	bp.Description = description.String
 	bp.Icon = icon.String
-	json.Unmarshal(schema, &bp.Schema)
+	if err := json.Unmarshal(schema, &bp.Schema); err != nil {
+		return nil, err
+	}
 
 	return bp, nil
 }

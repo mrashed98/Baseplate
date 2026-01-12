@@ -9,12 +9,12 @@ import (
 )
 
 type Router struct {
-	engine          *gin.Engine
-	authMiddleware  *middleware.AuthMiddleware
-	authHandler     *handlers.AuthHandler
-	teamHandler     *handlers.TeamHandler
+	engine           *gin.Engine
+	authMiddleware   *middleware.AuthMiddleware
+	authHandler      *handlers.AuthHandler
+	teamHandler      *handlers.TeamHandler
 	blueprintHandler *handlers.BlueprintHandler
-	entityHandler   *handlers.EntityHandler
+	entityHandler    *handlers.EntityHandler
 }
 
 func NewRouter(
@@ -96,7 +96,7 @@ func (r *Router) setupRoutes() {
 		}
 
 		// API key deletion (not team-scoped in URL)
-		protected.DELETE("/api-keys/:keyId", r.teamHandler.DeleteAPIKey)
+		protected.DELETE("/api-keys/:keyId", r.teamHandler.DeleteAPIKey, r.authMiddleware.RequireTeam(), r.authMiddleware.RequirePermission(auth.PermTeamManage))
 
 		// Blueprints (team required via header or param)
 		blueprints := protected.Group("/blueprints")

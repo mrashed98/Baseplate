@@ -2,6 +2,7 @@
 
 # Build the application
 build:
+	mkdir -p bin
 	go build -o bin/server ./cmd/server
 
 # Run the application

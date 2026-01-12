@@ -66,7 +66,11 @@ func (h *EntityHandler) List(c *gin.Context) {
 
 	blueprintID := c.Param("blueprintId")
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 0 {
+		limit = 50
+	}
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
 	resp, err := h.entityService.List(c.Request.Context(), teamID, blueprintID, limit, offset)
@@ -194,5 +198,5 @@ func (h *EntityHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusNoContent, nil)
+	c.Status(http.StatusNoContent)
 }

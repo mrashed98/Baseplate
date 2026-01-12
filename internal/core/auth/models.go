@@ -7,12 +7,12 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"`
-	Name         string     `json:"name"`
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
+	Name         string    `json:"name"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type Team struct {
@@ -115,7 +115,7 @@ var AllPermissions = []string{
 	PermActionRead, PermActionWrite, PermActionExecute,
 }
 
-var AdminPermissions = AllPermissions
+var AdminPermissions = append([]string{}, AllPermissions...)
 
 var EditorPermissions = []string{
 	PermBlueprintRead, PermBlueprintWrite,

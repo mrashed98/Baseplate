@@ -70,19 +70,29 @@ func (v *Validator) Validate(data map[string]interface{}, schema map[string]inte
 	return nil
 }
 
+func removeRequiredDeep(schema map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	for k, v := range schema {
+		if k == "required" {
+			continue
+		}
+		if nestedMap, ok := v.(map[string]interface{}); ok {
+			result[k] = removeRequiredDeep(nestedMap)
+		} else {
+			result[k] = v
+		}
+	}
+	return result
+}
+
 func (v *Validator) ValidatePartial(data map[string]interface{}, schema map[string]interface{}) error {
 	// For partial updates, remove required constraint
-	if schema == nil || len(schema) == 0 {
+	if len(schema) == 0 {
 		return nil
 	}
 
 	// Create a copy of schema without required fields
-	partialSchema := make(map[string]interface{})
-	for k, val := range schema {
-		if k != "required" {
-			partialSchema[k] = val
-		}
-	}
+	partialSchema := removeRequiredDeep(schema)
 
 	return v.Validate(data, partialSchema)
 }

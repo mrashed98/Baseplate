@@ -102,7 +102,15 @@ func (m *AuthMiddleware) RequireTeam() gin.HandlerFunc {
 		// Verify user has access to this team
 		userID, exists := c.Get(ContextUserID)
 		if exists {
-			permissions, err := m.authService.GetUserPermissions(c.Request.Context(), teamID, userID.(uuid.UUID))
+
+			userUUID, ok := userID.(uuid.UUID)
+			if !ok {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "invalid user type"})
+				return
+			}
+
+			permissions, err := m.authService.GetUserPermissions(c.Request.Context(), teamID, userUUID)
+
 			if err != nil {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "access denied"})
 				return
@@ -123,7 +131,13 @@ func (m *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 			return
 		}
 
-		permissions := perms.([]string)
+		permissions, ok := perms.([]string)
+
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "invalid permession type"})
+			return
+		}
+
 		for _, p := range permissions {
 			if p == permission {
 				c.Next()
@@ -141,6 +155,7 @@ func GetUserID(c *gin.Context) (uuid.UUID, bool) {
 	if !exists {
 		return uuid.Nil, false
 	}
+
 	return val.(uuid.UUID), true
 }
 
@@ -149,7 +164,12 @@ func GetTeamID(c *gin.Context) (uuid.UUID, bool) {
 	if !exists {
 		return uuid.Nil, false
 	}
-	return val.(uuid.UUID), true
+
+	if id, ok := val.(uuid.UUID); ok {
+		return id, true
+	}
+
+	return uuid.Nil, false
 }
 
 func GetPermissions(c *gin.Context) []string {
@@ -157,5 +177,10 @@ func GetPermissions(c *gin.Context) []string {
 	if !exists {
 		return nil
 	}
-	return val.([]string)
+
+	if perms, ok := val.([]string); ok {
+		return perms
+	}
+
+	return nil
 }

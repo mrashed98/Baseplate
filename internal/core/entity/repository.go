@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -162,9 +163,18 @@ func (r *Repository) Search(ctx context.Context, teamID uuid.UUID, blueprintID s
 	return entities, total, err
 }
 
+func isValidProperty(property string) bool {
+	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_.]+$`, property)
+	return matched
+}
+
 func (r *Repository) buildFilterClause(filter SearchFilter, argIndex int) (string, []interface{}, int) {
 	var clause string
 	var args []interface{}
+
+	if !isValidProperty(filter.Property) {
+		return "", nil, argIndex
+	}
 
 	// Property path - supports nested properties like "metadata.version"
 	propPath := fmt.Sprintf("data->'%s'", strings.Replace(filter.Property, ".", "'->'", -1))
@@ -268,7 +278,9 @@ func (r *Repository) scanEntity(row *sql.Row) (*Entity, error) {
 	}
 
 	entity.Title = title.String
-	json.Unmarshal(data, &entity.Data)
+	if err := json.Unmarshal(data, &entity.Data); err != nil {
+		return nil, err
+	}
 	return entity, nil
 }
 
@@ -288,7 +300,9 @@ func (r *Repository) scanEntities(rows *sql.Rows) ([]*Entity, error) {
 		}
 
 		entity.Title = title.String
-		json.Unmarshal(data, &entity.Data)
+		if err := json.Unmarshal(data, &entity.Data); err != nil {
+			return nil, err
+		}
 		entities = append(entities, entity)
 	}
 	return entities, rows.Err()

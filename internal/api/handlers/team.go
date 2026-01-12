@@ -263,7 +263,11 @@ func (h *TeamHandler) CreateAPIKey(c *gin.Context) {
 		return
 	}
 
-	userID, _ := middleware.GetUserID(c)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
 	var req auth.CreateAPIKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -281,6 +285,12 @@ func (h *TeamHandler) CreateAPIKey(c *gin.Context) {
 }
 
 func (h *TeamHandler) DeleteAPIKey(c *gin.Context) {
+	_, ok := middleware.GetTeamID(c)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "team id required"})
+		return
+	}
+
 	keyIDStr := c.Param("keyId")
 	keyID, err := uuid.Parse(keyIDStr)
 	if err != nil {

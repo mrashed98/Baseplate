@@ -11,9 +11,9 @@ func ErrorHandler() gin.HandlerFunc {
 		c.Next()
 
 		if len(c.Errors) > 0 {
-			err := c.Errors.Last()
+
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": err.Error(),
+				"error": "Something wrong happened",
 			})
 		}
 	}
