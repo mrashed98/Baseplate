@@ -25,6 +25,8 @@ func NewClient(cfg *config.DatabaseConfig) (*Client, error) {
 
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(1 * time.Minute)
 
 	return &Client{DB: db}, nil
 }
