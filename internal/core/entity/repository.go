@@ -108,11 +108,33 @@ func (r *Repository) Search(ctx context.Context, teamID uuid.UUID, blueprintID s
 		if strings.ToUpper(req.OrderDir) == "DESC" {
 			dir = "DESC"
 		}
-		if req.OrderBy == "created_at" || req.OrderBy == "updated_at" || req.OrderBy == "identifier" || req.OrderBy == "title" {
+		
+		// Validate allowed column names to prevent SQL injection
+		allowedColumns := map[string]bool{
+			"created_at": true,
+			"updated_at": true,
+			"identifier": true,
+			"title": true,
+		}
+		
+		if allowedColumns[req.OrderBy] {
 			orderClause = fmt.Sprintf("%s %s", req.OrderBy, dir)
 		} else {
-			// Order by JSONB property
-			orderClause = fmt.Sprintf("data->>'%s' %s", req.OrderBy, dir)
+			// For JSONB properties, use parameterized query or validate property name
+			// This is a simplified approach - consider using a whitelist for production
+			if len(req.OrderBy) > 0 && len(req.OrderBy) < 100 {
+				// Basic validation: alphanumeric and dots only
+				validProperty := true
+				for _, r := range req.OrderBy {
+					if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_') {
+						validProperty = false
+						break
+					}
+				}
+				if validProperty {
+					orderClause = fmt.Sprintf("data->>'%s' %s", req.OrderBy, dir)
+				}
+			}
 		}
 	}
 
