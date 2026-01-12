@@ -209,11 +209,12 @@ graph LR
 
     J --> K{Team Needed?}
     K -->|Yes| L[Extract team_id from URL/Header]
-    K -->|No| M[RequireSuperAdmin]
+    K -->|No| M_SUPER[RequireSuperAdmin]
 
-    L --> M{Is Super Admin?}
-    M -->|Yes| N[Grant AllPermissions]
-    M -->|No| O[RequirePermission]
+    L --> M_CHECK{Is Super Admin?}
+    M_CHECK -->|Yes| N[Grant AllPermissions]
+    M_CHECK -->|No| O[RequirePermission]
+    M_SUPER --> M_CHECK
 
     N --> P[Handler]
     O --> Q{Has Permission?}

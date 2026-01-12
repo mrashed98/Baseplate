@@ -20,7 +20,7 @@
 ### 1. Start the Database
 
 ```bash
-cd /Users/rashed/instabug/code-days/Baseplate
+cd <project-root>
 make db-up
 ```
 
@@ -378,7 +378,7 @@ curl -X POST "http://localhost:8080/api/admin/users/$REGULAR_USER_ID/promote" \
 ```bash
 # Time multiple requests
 for i in {1..100}; do
-  curl -w "@curl-format.txt" -o /dev/null -s \
+  curl -w "%{time_total}s\n" -o /dev/null -s \
     "http://localhost:8080/api/admin/users" \
     -H "Authorization: Bearer $SUPER_ADMIN_TOKEN"
 done | awk '{sum+=$1; count++} END {print "Average: " sum/count "ms"}'

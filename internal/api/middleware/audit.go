@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"strings"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,18 +12,9 @@ const (
 // AuditMiddleware extracts and sets audit information in context
 func AuditMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Extract IP address - check X-Forwarded-For first (for proxies)
-		ipAddress := c.GetHeader("X-Forwarded-For")
-		if ipAddress == "" {
-			ipAddress = c.GetHeader("X-Real-IP")
-		}
-		if ipAddress == "" {
-			ipAddress = c.ClientIP()
-		}
-		// Handle comma-separated IPs (take the first one)
-		if idx := strings.Index(ipAddress, ","); idx != -1 {
-			ipAddress = strings.TrimSpace(ipAddress[:idx])
-		}
+		// Use Gin's ClientIP which respects TrustedProxies configuration
+		// This prevents IP spoofing through X-Forwarded-For header manipulation
+		ipAddress := c.ClientIP()
 
 		// Extract user agent
 		userAgent := c.GetHeader("User-Agent")

@@ -23,6 +23,11 @@ func main() {
 		log.Fatal("SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD environment variables are required")
 	}
 
+	// Validate password strength for super admin account
+	if len(superAdminPassword) < 12 {
+		log.Fatal("SUPER_ADMIN_PASSWORD must be at least 12 characters long")
+	}
+
 	// Load database configuration
 	cfg := config.Load()
 
@@ -64,13 +69,15 @@ func main() {
 	}
 
 	// Create new super admin user
+	now := time.Now()
 	user := &auth.User{
-		ID:           uuid.New(),
-		Email:        superAdminEmail,
-		PasswordHash: string(hash),
-		Name:         "Super Admin",
-		Status:       "active",
-		IsSuperAdmin: true,
+		ID:                   uuid.New(),
+		Email:                superAdminEmail,
+		PasswordHash:         string(hash),
+		Name:                 "Super Admin",
+		Status:               "active",
+		IsSuperAdmin:         true,
+		SuperAdminPromotedAt: &now,
 	}
 
 	if err := authRepo.CreateUser(ctx, user); err != nil {

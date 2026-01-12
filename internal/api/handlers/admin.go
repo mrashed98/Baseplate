@@ -21,13 +21,31 @@ func NewAdminHandler(authService *auth.Service) *AdminHandler {
 
 // ListTeams returns all teams in the system (super admin only)
 func (h *AdminHandler) ListTeams(c *gin.Context) {
-	teams, err := h.authService.GetAllTeams(c.Request.Context())
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	teams, err := h.authService.GetAllTeams(c.Request.Context(), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"teams": teams})
+	c.JSON(http.StatusOK, gin.H{
+		"teams":  teams,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 // GetTeamDetail returns details for a specific team (super admin only)
@@ -139,6 +157,11 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		user.Name = req.Name
 	}
 	if req.Status != "" {
+		// Validate status value
+		if req.Status != "active" && req.Status != "deleted" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value, must be 'active' or 'deleted'"})
+			return
+		}
 		user.Status = req.Status
 	}
 
@@ -166,7 +189,18 @@ func (h *AdminHandler) PromoteUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.PromoteToSuperAdmin(c.Request.Context(), actorID, userID)
+	// Get audit context
+	ipAddress := middleware.GetIPAddress(c)
+	userAgent := middleware.GetUserAgent(c)
+	var ipPtr, uaPtr *string
+	if ipAddress != "" {
+		ipPtr = &ipAddress
+	}
+	if userAgent != "" {
+		uaPtr = &userAgent
+	}
+
+	user, err := h.authService.PromoteToSuperAdmin(c.Request.Context(), actorID, userID, ipPtr, uaPtr)
 	if err != nil {
 		if err == auth.ErrUnauthorized {
 			c.JSON(http.StatusForbidden, gin.H{"error": "only super admins can promote users"})
@@ -203,7 +237,18 @@ func (h *AdminHandler) DemoteUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.DemoteFromSuperAdmin(c.Request.Context(), actorID, userID)
+	// Get audit context
+	ipAddress := middleware.GetIPAddress(c)
+	userAgent := middleware.GetUserAgent(c)
+	var ipPtr, uaPtr *string
+	if ipAddress != "" {
+		ipPtr = &ipAddress
+	}
+	if userAgent != "" {
+		uaPtr = &userAgent
+	}
+
+	user, err := h.authService.DemoteFromSuperAdmin(c.Request.Context(), actorID, userID, ipPtr, uaPtr)
 	if err != nil {
 		if err == auth.ErrUnauthorized {
 			c.JSON(http.StatusForbidden, gin.H{"error": "only super admins can demote users"})
@@ -244,7 +289,7 @@ func (h *AdminHandler) QueryAuditLogs(c *gin.Context) {
 		}
 	}
 
-	logs, err := h.authService.GetAuditLogs(c.Request.Context(), limit, offset)
+	logs, err := h.authService.GetSuperAdminAuditLogs(c.Request.Context(), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

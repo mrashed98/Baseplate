@@ -104,6 +104,19 @@ func (s *Service) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) 
 	return s.repo.GetUserByID(ctx, id)
 }
 
+// CheckSuperAdminStatus verifies if a user is a super admin by checking the database.
+// This is used to validate JWT claims against the current DB state (for demotion detection).
+func (s *Service) CheckSuperAdminStatus(ctx context.Context, userID uuid.UUID) (bool, error) {
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if user == nil {
+		return false, nil
+	}
+	return user.IsSuperAdmin, nil
+}
+
 func (s *Service) GetAllUsers(ctx context.Context, limit int, offset int) ([]*User, error) {
 	return s.repo.GetAllUsers(ctx, limit, offset)
 }
@@ -116,7 +129,7 @@ func (s *Service) UpdateUser(ctx context.Context, user *User) error {
 	return s.repo.UpdateUser(ctx, user)
 }
 
-func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID) (*User, error) {
+func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID, ipAddress, userAgent *string) (*User, error) {
 	// Verify actor is super admin
 	actor, err := s.repo.GetUserByID(ctx, actorID)
 	if err != nil {
@@ -140,6 +153,13 @@ func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, ta
 		return nil, ErrAlreadySuperAdmin
 	}
 
+	// Capture old state for audit log
+	oldData := map[string]any{
+		"is_super_admin":          target.IsSuperAdmin,
+		"super_admin_promoted_at": target.SuperAdminPromotedAt,
+		"super_admin_promoted_by": target.SuperAdminPromotedBy,
+	}
+
 	// Update user
 	target.IsSuperAdmin = true
 	now := time.Now()
@@ -150,10 +170,32 @@ func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, ta
 		return nil, err
 	}
 
+	// Create audit log
+	resultStatus := "success"
+	auditLog := &AuditLog{
+		ID:         uuid.New(),
+		UserID:     &actorID,
+		ActorType:  "super_admin",
+		EntityType: "user",
+		EntityID:   targetUserID.String(),
+		Action:     "promote",
+		OldData:    oldData,
+		NewData: map[string]any{
+			"is_super_admin":          target.IsSuperAdmin,
+			"super_admin_promoted_at": target.SuperAdminPromotedAt,
+			"super_admin_promoted_by": target.SuperAdminPromotedBy,
+		},
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		ResultStatus: &resultStatus,
+	}
+	// Log asynchronously to not block the response
+	go s.repo.CreateAuditLog(context.Background(), auditLog)
+
 	return target, nil
 }
 
-func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID) (*User, error) {
+func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID, ipAddress, userAgent *string) (*User, error) {
 	// Verify actor is super admin
 	actor, err := s.repo.GetUserByID(ctx, actorID)
 	if err != nil {
@@ -175,6 +217,13 @@ func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, t
 	// Check if not super admin
 	if !target.IsSuperAdmin {
 		return nil, ErrNotSuperAdmin
+	}
+
+	// Capture old state for audit log
+	oldData := map[string]any{
+		"is_super_admin":          target.IsSuperAdmin,
+		"super_admin_promoted_at": target.SuperAdminPromotedAt,
+		"super_admin_promoted_by": target.SuperAdminPromotedBy,
 	}
 
 	// Start transaction with FOR UPDATE lock
@@ -209,11 +258,34 @@ func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, t
 	target.SuperAdminPromotedAt = nil
 	target.SuperAdminPromotedBy = nil
 
+	// Create audit log
+	resultStatus := "success"
+	auditLog := &AuditLog{
+		ID:         uuid.New(),
+		UserID:     &actorID,
+		ActorType:  "super_admin",
+		EntityType: "user",
+		EntityID:   targetUserID.String(),
+		Action:     "demote",
+		OldData:    oldData,
+		NewData: map[string]any{
+			"is_super_admin":          target.IsSuperAdmin,
+			"super_admin_promoted_at": target.SuperAdminPromotedAt,
+			"super_admin_promoted_by": target.SuperAdminPromotedBy,
+		},
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		ResultStatus: &resultStatus,
+	}
+	// Log asynchronously to not block the response
+	go s.repo.CreateAuditLog(context.Background(), auditLog)
+
 	return target, nil
 }
 
-func (s *Service) GetAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditLog, error) {
-	return s.repo.GetAuditLogs(ctx, limit, offset)
+// GetSuperAdminAuditLogs returns audit logs for super admin actions
+func (s *Service) GetSuperAdminAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditLog, error) {
+	return s.repo.GetSuperAdminAuditLogs(ctx, limit, offset)
 }
 
 func (s *Service) CreateAuditLog(ctx context.Context, log *AuditLog) error {
@@ -339,8 +411,8 @@ func (s *Service) GetTeamsByUser(ctx context.Context, userID uuid.UUID) ([]*Team
 	return s.repo.GetTeamsByUserID(ctx, userID)
 }
 
-func (s *Service) GetAllTeams(ctx context.Context) ([]*Team, error) {
-	return s.repo.GetAllTeams(ctx)
+func (s *Service) GetAllTeams(ctx context.Context, limit, offset int) ([]*Team, error) {
+	return s.repo.GetAllTeams(ctx, limit, offset)
 }
 
 func (s *Service) UpdateTeam(ctx context.Context, team *Team) error {

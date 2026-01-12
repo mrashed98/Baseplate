@@ -122,10 +122,24 @@ func (r *Repository) GetUserWithMemberships(ctx context.Context, userID uuid.UUI
 }
 
 func (r *Repository) CountSuperAdminsForUpdate(ctx context.Context, tx *sql.Tx) (int, error) {
-	query := `SELECT COUNT(*) FROM users WHERE is_super_admin = true FOR UPDATE`
-	var count int
-	err := tx.QueryRowContext(ctx, query).Scan(&count)
-	return count, err
+	// Note: PostgreSQL does not allow FOR UPDATE with aggregate functions
+	// We must select the rows first, then count them
+	query := `SELECT id FROM users WHERE is_super_admin = true FOR UPDATE`
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return 0, err
+		}
+		count++
+	}
+	return count, rows.Err()
 }
 
 func (r *Repository) UpdateUserSuperAdminStatus(ctx context.Context, tx *sql.Tx, userID uuid.UUID, isSuperAdmin bool, promotedBy *uuid.UUID) error {
@@ -173,7 +187,8 @@ func (r *Repository) CreateAuditLog(ctx context.Context, log *AuditLog) error {
 	).Scan(&log.CreatedAt)
 }
 
-func (r *Repository) GetAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditLog, error) {
+// GetSuperAdminAuditLogs returns audit logs filtered by actor_type = 'super_admin'
+func (r *Repository) GetSuperAdminAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditLog, error) {
 	query := `
 		SELECT id, team_id, user_id, actor_type, entity_type, entity_id, action, old_data, new_data, ip_address, user_agent, result_status, request_context, created_at
 		FROM audit_logs
@@ -285,9 +300,9 @@ func (r *Repository) GetTeamsByUserID(ctx context.Context, userID uuid.UUID) ([]
 	return teams, rows.Err()
 }
 
-func (r *Repository) GetAllTeams(ctx context.Context) ([]*Team, error) {
-	query := `SELECT id, name, slug, created_at FROM teams ORDER BY created_at DESC`
-	rows, err := r.db.DB.QueryContext(ctx, query)
+func (r *Repository) GetAllTeams(ctx context.Context, limit, offset int) ([]*Team, error) {
+	query := `SELECT id, name, slug, created_at FROM teams ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+	rows, err := r.db.DB.QueryContext(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

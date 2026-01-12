@@ -3,12 +3,55 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/baseplate/baseplate/internal/core/auth"
 )
+
+// superAdminCache provides a simple TTL cache for super admin status checks.
+// This reduces DB load while ensuring demoted users lose access within the cache TTL.
+type superAdminCache struct {
+	mu      sync.RWMutex
+	entries map[uuid.UUID]cacheEntry
+	ttl     time.Duration
+}
+
+type cacheEntry struct {
+	isSuperAdmin bool
+	expiresAt    time.Time
+}
+
+func newSuperAdminCache(ttl time.Duration) *superAdminCache {
+	return &superAdminCache{
+		entries: make(map[uuid.UUID]cacheEntry),
+		ttl:     ttl,
+	}
+}
+
+func (c *superAdminCache) get(userID uuid.UUID) (bool, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	entry, exists := c.entries[userID]
+	if !exists || time.Now().After(entry.expiresAt) {
+		return false, false
+	}
+	return entry.isSuperAdmin, true
+}
+
+func (c *superAdminCache) set(userID uuid.UUID, isSuperAdmin bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.entries[userID] = cacheEntry{
+		isSuperAdmin: isSuperAdmin,
+		expiresAt:    time.Now().Add(c.ttl),
+	}
+}
 
 const (
 	ContextUserID       = "user_id"
@@ -18,11 +61,19 @@ const (
 )
 
 type AuthMiddleware struct {
-	authService *auth.Service
+	authService     *auth.Service
+	superAdminCache *superAdminCache
 }
 
+// SuperAdminCacheTTL is the duration super admin status is cached before re-checking the database.
+// After demotion, a user will lose super admin access within this time window.
+const SuperAdminCacheTTL = 1 * time.Minute
+
 func NewAuthMiddleware(authService *auth.Service) *AuthMiddleware {
-	return &AuthMiddleware{authService: authService}
+	return &AuthMiddleware{
+		authService:     authService,
+		superAdminCache: newSuperAdminCache(SuperAdminCacheTTL),
+	}
 }
 
 func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
@@ -218,13 +269,49 @@ func IsSuperAdmin(c *gin.Context) bool {
 	return false
 }
 
-// RequireSuperAdmin middleware ensures user is a super admin
+// RequireSuperAdmin middleware ensures user is a super admin.
+// It verifies the claim against the database (with caching) to handle demoted users
+// whose JWT tokens still contain is_super_admin=true.
 func (m *AuthMiddleware) RequireSuperAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// First check JWT claim - if not super admin in JWT, reject immediately
 		if !IsSuperAdmin(c) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "super admin privileges required"})
 			return
 		}
+
+		// Get user ID for DB verification
+		userID, exists := GetUserID(c)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user id not found"})
+			return
+		}
+
+		// Check cache first
+		if isSuperAdmin, found := m.superAdminCache.get(userID); found {
+			if !isSuperAdmin {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "super admin privileges required"})
+				return
+			}
+			c.Next()
+			return
+		}
+
+		// Cache miss - verify against database
+		isSuperAdmin, err := m.authService.CheckSuperAdminStatus(c.Request.Context(), userID)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to verify super admin status"})
+			return
+		}
+
+		// Update cache
+		m.superAdminCache.set(userID, isSuperAdmin)
+
+		if !isSuperAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "super admin privileges required"})
+			return
+		}
+
 		c.Next()
 	}
 }
