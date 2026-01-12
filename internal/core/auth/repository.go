@@ -69,6 +69,58 @@ func (r *Repository) UpdateUser(ctx context.Context, user *User) error {
 	return err
 }
 
+func (r *Repository) GetAllUsers(ctx context.Context, limit int, offset int) ([]*User, error) {
+	query := `
+		SELECT id, email, password_hash, name, status, is_super_admin, super_admin_promoted_at, super_admin_promoted_by, created_at
+		FROM users
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2`
+	rows, err := r.db.DB.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		user := &User{}
+		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Status,
+			&user.IsSuperAdmin, &user.SuperAdminPromotedAt, &user.SuperAdminPromotedBy, &user.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
+func (r *Repository) GetUserWithMemberships(ctx context.Context, userID uuid.UUID) (*User, []*TeamMembership, error) {
+	user, err := r.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if user == nil {
+		return nil, nil, nil
+	}
+
+	query := `SELECT id, team_id, user_id, role_id, created_at FROM team_memberships WHERE user_id = $1`
+	rows, err := r.db.DB.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var memberships []*TeamMembership
+	for rows.Next() {
+		tm := &TeamMembership{}
+		if err := rows.Scan(&tm.ID, &tm.TeamID, &tm.UserID, &tm.RoleID, &tm.CreatedAt); err != nil {
+			return nil, nil, err
+		}
+		memberships = append(memberships, tm)
+	}
+
+	return user, memberships, rows.Err()
+}
+
 // Team methods
 func (r *Repository) CreateTeam(ctx context.Context, team *Team) error {
 	query := `

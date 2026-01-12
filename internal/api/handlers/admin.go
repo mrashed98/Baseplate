@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -50,4 +51,106 @@ func (h *AdminHandler) GetTeamDetail(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, team)
+}
+
+// ListUsers returns all users in the system with pagination (super admin only)
+func (h *AdminHandler) ListUsers(c *gin.Context) {
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+	}
+
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	users, err := h.authService.GetAllUsers(c.Request.Context(), limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"users":  users,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// GetUserDetail returns details for a specific user with their team memberships (super admin only)
+func (h *AdminHandler) GetUserDetail(c *gin.Context) {
+	userIDStr := c.Param("userId")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	user, memberships, err := h.authService.GetUserDetail(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user":        user,
+		"memberships": memberships,
+	})
+}
+
+// UpdateUser updates a user's information (super admin only)
+func (h *AdminHandler) UpdateUser(c *gin.Context) {
+	userIDStr := c.Param("userId")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	// Update allowed fields
+	if req.Name != "" {
+		user.Name = req.Name
+	}
+	if req.Status != "" {
+		user.Status = req.Status
+	}
+
+	if err := h.authService.UpdateUser(c.Request.Context(), user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+type UpdateUserRequest struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }

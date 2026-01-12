@@ -131,8 +131,14 @@ func (r *Router) setupRoutes() {
 		admin := protected.Group("/admin")
 		admin.Use(r.authMiddleware.RequireSuperAdmin())
 		{
+			// Team management
 			admin.GET("/teams", r.adminHandler.ListTeams)
 			admin.GET("/teams/:teamId", r.adminHandler.GetTeamDetail)
+
+			// User management
+			admin.GET("/users", r.adminHandler.ListUsers)
+			admin.GET("/users/:userId", r.adminHandler.GetUserDetail)
+			admin.PUT("/users/:userId", r.adminHandler.UpdateUser)
 		}
 	}
 }

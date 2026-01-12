@@ -101,6 +101,18 @@ func (s *Service) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) 
 	return s.repo.GetUserByID(ctx, id)
 }
 
+func (s *Service) GetAllUsers(ctx context.Context, limit int, offset int) ([]*User, error) {
+	return s.repo.GetAllUsers(ctx, limit, offset)
+}
+
+func (s *Service) GetUserDetail(ctx context.Context, userID uuid.UUID) (*User, []*TeamMembership, error) {
+	return s.repo.GetUserWithMemberships(ctx, userID)
+}
+
+func (s *Service) UpdateUser(ctx context.Context, user *User) error {
+	return s.repo.UpdateUser(ctx, user)
+}
+
 func (s *Service) generateToken(user *User) (string, error) {
 	isSuperAdmin := user.IsSuperAdmin
 	claims := JWTClaims{
