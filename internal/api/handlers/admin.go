@@ -150,6 +150,84 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// PromoteUser promotes a user to super admin (super admin only)
+func (h *AdminHandler) PromoteUser(c *gin.Context) {
+	userIDStr := c.Param("userId")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	// Get actor from context
+	actorID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user id"})
+		return
+	}
+
+	user, err := h.authService.PromoteToSuperAdmin(c.Request.Context(), actorID, userID)
+	if err != nil {
+		if err == auth.ErrUnauthorized {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only super admins can promote users"})
+			return
+		}
+		if err == auth.ErrNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		if err == auth.ErrAlreadySuperAdmin {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user is already a super admin"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// DemoteUser demotes a user from super admin (super admin only)
+func (h *AdminHandler) DemoteUser(c *gin.Context) {
+	userIDStr := c.Param("userId")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	// Get actor from context
+	actorID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user id"})
+		return
+	}
+
+	user, err := h.authService.DemoteFromSuperAdmin(c.Request.Context(), actorID, userID)
+	if err != nil {
+		if err == auth.ErrUnauthorized {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only super admins can demote users"})
+			return
+		}
+		if err == auth.ErrNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		if err == auth.ErrNotSuperAdmin {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not a super admin"})
+			return
+		}
+		if err == auth.ErrLastSuperAdmin {
+			c.JSON(http.StatusConflict, gin.H{"error": "cannot demote the last super admin"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
 type UpdateUserRequest struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`

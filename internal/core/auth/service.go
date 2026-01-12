@@ -23,6 +23,9 @@ var (
 	ErrNotFound           = errors.New("not found")
 	ErrUnauthorized       = errors.New("unauthorized")
 	ErrForbidden          = errors.New("forbidden")
+	ErrLastSuperAdmin     = errors.New("cannot demote the last super admin")
+	ErrAlreadySuperAdmin  = errors.New("user is already a super admin")
+	ErrNotSuperAdmin      = errors.New("user is not a super admin")
 )
 
 type Service struct {
@@ -111,6 +114,102 @@ func (s *Service) GetUserDetail(ctx context.Context, userID uuid.UUID) (*User, [
 
 func (s *Service) UpdateUser(ctx context.Context, user *User) error {
 	return s.repo.UpdateUser(ctx, user)
+}
+
+func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID) (*User, error) {
+	// Verify actor is super admin
+	actor, err := s.repo.GetUserByID(ctx, actorID)
+	if err != nil {
+		return nil, err
+	}
+	if actor == nil || !actor.IsSuperAdmin {
+		return nil, ErrUnauthorized
+	}
+
+	// Get target user
+	target, err := s.repo.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, ErrNotFound
+	}
+
+	// Check if already super admin
+	if target.IsSuperAdmin {
+		return nil, ErrAlreadySuperAdmin
+	}
+
+	// Update user
+	target.IsSuperAdmin = true
+	now := time.Now()
+	target.SuperAdminPromotedAt = &now
+	target.SuperAdminPromotedBy = &actorID
+
+	if err := s.repo.UpdateUser(ctx, target); err != nil {
+		return nil, err
+	}
+
+	return target, nil
+}
+
+func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID) (*User, error) {
+	// Verify actor is super admin
+	actor, err := s.repo.GetUserByID(ctx, actorID)
+	if err != nil {
+		return nil, err
+	}
+	if actor == nil || !actor.IsSuperAdmin {
+		return nil, ErrUnauthorized
+	}
+
+	// Get target user
+	target, err := s.repo.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, ErrNotFound
+	}
+
+	// Check if not super admin
+	if !target.IsSuperAdmin {
+		return nil, ErrNotSuperAdmin
+	}
+
+	// Start transaction with FOR UPDATE lock
+	tx, err := s.repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Count super admins with lock
+	count, err := s.repo.CountSuperAdminsForUpdate(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prevent demotion of last super admin
+	if count <= 1 {
+		return nil, ErrLastSuperAdmin
+	}
+
+	// Update user status
+	if err := s.repo.UpdateUserSuperAdminStatus(ctx, tx, targetUserID, false, nil); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// Fetch updated user
+	target.IsSuperAdmin = false
+	target.SuperAdminPromotedAt = nil
+	target.SuperAdminPromotedBy = nil
+
+	return target, nil
 }
 
 func (s *Service) generateToken(user *User) (string, error) {

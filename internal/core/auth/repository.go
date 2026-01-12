@@ -121,6 +121,23 @@ func (r *Repository) GetUserWithMemberships(ctx context.Context, userID uuid.UUI
 	return user, memberships, rows.Err()
 }
 
+func (r *Repository) CountSuperAdminsForUpdate(ctx context.Context, tx *sql.Tx) (int, error) {
+	query := `SELECT COUNT(*) FROM users WHERE is_super_admin = true FOR UPDATE`
+	var count int
+	err := tx.QueryRowContext(ctx, query).Scan(&count)
+	return count, err
+}
+
+func (r *Repository) UpdateUserSuperAdminStatus(ctx context.Context, tx *sql.Tx, userID uuid.UUID, isSuperAdmin bool, promotedBy *uuid.UUID) error {
+	query := `
+		UPDATE users
+		SET is_super_admin = $2, super_admin_promoted_at = CASE WHEN $2 THEN NOW() ELSE NULL END, super_admin_promoted_by = $3
+		WHERE id = $1`
+
+	_, err := tx.ExecContext(ctx, query, userID, isSuperAdmin, promotedBy)
+	return err
+}
+
 // Team methods
 func (r *Repository) CreateTeam(ctx context.Context, team *Team) error {
 	query := `

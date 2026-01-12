@@ -139,6 +139,8 @@ func (r *Router) setupRoutes() {
 			admin.GET("/users", r.adminHandler.ListUsers)
 			admin.GET("/users/:userId", r.adminHandler.GetUserDetail)
 			admin.PUT("/users/:userId", r.adminHandler.UpdateUser)
+			admin.POST("/users/:userId/promote", r.adminHandler.PromoteUser)
+			admin.POST("/users/:userId/demote", r.adminHandler.DemoteUser)
 		}
 	}
 }
