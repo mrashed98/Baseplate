@@ -139,6 +139,12 @@ func (m *AuthMiddleware) RequireTeam() gin.HandlerFunc {
 
 func (m *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Super admins bypass all permission checks
+		if IsSuperAdmin(c) {
+			c.Next()
+			return
+		}
+
 		perms, exists := c.Get(ContextPermissions)
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "no permissions found"})
