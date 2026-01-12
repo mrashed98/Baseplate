@@ -47,9 +47,17 @@ func (c *superAdminCache) set(userID uuid.UUID, isSuperAdmin bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Lazy cleanup: remove expired entries to prevent memory leak
+	now := time.Now()
+	for id, entry := range c.entries {
+		if now.After(entry.expiresAt) {
+			delete(c.entries, id)
+		}
+	}
+
 	c.entries[userID] = cacheEntry{
 		isSuperAdmin: isSuperAdmin,
-		expiresAt:    time.Now().Add(c.ttl),
+		expiresAt:    now.Add(c.ttl),
 	}
 }
 

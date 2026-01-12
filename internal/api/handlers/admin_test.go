@@ -35,33 +35,38 @@ func createRegularUserTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	return c, w
 }
 
-// Test ListTeams endpoint authorization
-func TestListTeams_SuperAdminAllowed(t *testing.T) {
+// Test middleware authorization behavior for admin endpoints
+// NOTE: These tests verify the middleware authorization check (IsSuperAdmin),
+// not the handler implementation itself. They document expected middleware behavior.
+
+func TestListTeams_MiddlewareAllowsSuperAdmin(t *testing.T) {
 	c, _ := createAdminTestContext()
 
+	// Verify middleware check passes for super admin context
 	if !middleware.IsSuperAdmin(c) {
-		t.Error("Super admin should be allowed to list teams")
+		t.Error("Middleware should allow super admin to access admin endpoints")
 	}
 }
 
-func TestListTeams_RegularUserBlocked(t *testing.T) {
+func TestListTeams_MiddlewareBlocksRegularUser(t *testing.T) {
 	c, w := createRegularUserTestContext()
 
+	// Simulate middleware rejection for non-super-admin
 	if !middleware.IsSuperAdmin(c) {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "super admin privileges required"})
 	}
 
 	if w.Code != http.StatusForbidden {
-		t.Error("Regular user should be blocked from listing all teams")
+		t.Error("Middleware should block regular user from admin endpoints")
 	}
 }
 
-// Test ListUsers endpoint
-func TestListUsers_SuperAdminAllowed(t *testing.T) {
+func TestListUsers_MiddlewareAllowsSuperAdmin(t *testing.T) {
 	c, _ := createAdminTestContext()
 
+	// Verify middleware check passes for super admin context
 	if !middleware.IsSuperAdmin(c) {
-		t.Error("Super admin should be allowed to list users")
+		t.Error("Middleware should allow super admin to access admin endpoints")
 	}
 }
 
@@ -238,34 +243,15 @@ func TestQueryAuditLogs_CustomPagination(t *testing.T) {
 	}
 }
 
-// Test error response formats
-func TestErrorResponse_InvalidUserID(t *testing.T) {
-	errorResponse := gin.H{"error": "invalid user id"}
-	if errorResponse["error"] != "invalid user id" {
-		t.Error("Error response format incorrect")
-	}
-}
-
-func TestErrorResponse_UserNotFound(t *testing.T) {
-	errorResponse := gin.H{"error": "user not found"}
-	if errorResponse["error"] != "user not found" {
-		t.Error("Error response format incorrect")
-	}
-}
-
-func TestErrorResponse_SuperAdminRequired(t *testing.T) {
-	errorResponse := gin.H{"error": "only super admins can promote users"}
-	if errorResponse["error"] != "only super admins can promote users" {
-		t.Error("Error response format incorrect")
-	}
-}
-
-func TestErrorResponse_LastSuperAdmin(t *testing.T) {
-	errorResponse := gin.H{"error": "cannot demote the last super admin"}
-	if errorResponse["error"] != "cannot demote the last super admin" {
-		t.Error("Error response format incorrect")
-	}
-}
+// Error Response Messages Documentation
+// The following error messages are used by admin handlers:
+// - "invalid user id" - returned when UUID parsing fails
+// - "user not found" - returned when user doesn't exist
+// - "only super admins can promote users" - returned for unauthorized promotion
+// - "only super admins can demote users" - returned for unauthorized demotion
+// - "cannot demote the last super admin" - returned when attempting to remove last admin
+// - "user is already a super admin" - returned when promoting existing admin
+// - "user is not a super admin" - returned when demoting non-admin
 
 // Test GetTeamDetail endpoint
 func TestGetTeamDetail_ValidUUID(t *testing.T) {

@@ -152,29 +152,26 @@ func TestAuditLog_DemoteAction(t *testing.T) {
 	}
 }
 
-// Test SQL query building patterns (without actual DB)
-func TestCountSuperAdminsQuery(t *testing.T) {
-	// The correct query should select IDs, not use COUNT(*) with FOR UPDATE
-	correctQuery := `SELECT id FROM users WHERE is_super_admin = true FOR UPDATE`
+// Test SQL query pattern documentation
+// NOTE: These tests document the correct SQL patterns used by the repository.
+// They serve as documentation and reminders of PostgreSQL constraints.
 
-	// Verify query doesn't use aggregate with FOR UPDATE
-	if correctQuery == `SELECT COUNT(*) FROM users WHERE is_super_admin = true FOR UPDATE` {
-		t.Error("Query should not use COUNT(*) with FOR UPDATE")
-	}
-
-	t.Log("Correct query pattern verified")
+func TestCountSuperAdminsQuery_Pattern(t *testing.T) {
+	// Document correct query pattern - FOR UPDATE cannot be used with COUNT(*)
+	// PostgreSQL error: "FOR UPDATE is not allowed with aggregate functions"
+	// The repository must select IDs first, then count programmatically.
+	t.Log("Correct pattern: SELECT id FROM users WHERE is_super_admin = true FOR UPDATE")
+	t.Log("Incorrect pattern: SELECT COUNT(*) ... FOR UPDATE (invalid in PostgreSQL)")
+	t.Log("The CountSuperAdminsForUpdate method iterates rows and counts programmatically")
 }
 
-func TestUpdateUserSuperAdminStatusQuery(t *testing.T) {
-	// Verify the query sets the correct fields
-	query := `UPDATE users SET is_super_admin = $2, super_admin_promoted_at = CASE WHEN $2 THEN NOW() ELSE NULL END, super_admin_promoted_by = $3 WHERE id = $1`
-
-	if query == "" {
-		t.Error("Query should not be empty")
-	}
-
-	// Verify query handles both promotion and demotion
+func TestUpdateUserSuperAdminStatusQuery_Pattern(t *testing.T) {
+	// Document the UPDATE query pattern for promotion/demotion
+	// The query must handle both cases:
+	// - Promotion: sets is_super_admin=true, sets timestamp, sets promoted_by
+	// - Demotion: sets is_super_admin=false, clears timestamp, clears promoted_by
 	t.Log("Update query handles both promotion (sets timestamp) and demotion (clears timestamp)")
+	t.Log("Pattern: UPDATE users SET is_super_admin = $2, super_admin_promoted_at = CASE WHEN $2 THEN NOW() ELSE NULL END, ...")
 }
 
 // Test pagination parameters

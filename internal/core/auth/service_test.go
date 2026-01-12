@@ -67,7 +67,11 @@ func (m *MockRepository) UpdateUserSuperAdminStatus(ctx context.Context, tx *sql
 	return nil
 }
 
-// Test PromoteToSuperAdmin
+// Test PromoteToSuperAdmin - Model Behavior Tests
+// NOTE: These tests verify model field behavior and preconditions, not service method integration.
+// The mock repository doesn't wire to the actual service, so these tests document expected
+// model state transitions rather than testing the PromoteToSuperAdmin service method directly.
+// For full integration tests, use a test database with the real service.
 func TestPromoteToSuperAdmin_Success(t *testing.T) {
 	mock := NewMockRepository()
 
@@ -93,26 +97,21 @@ func TestPromoteToSuperAdmin_Success(t *testing.T) {
 	}
 	mock.users[targetID] = target
 
-	// Test promotion logic (simulated)
-	// In real test, we would use the actual service
-
-	// Verify actor is super admin
+	// Verify preconditions for promotion
 	if !actor.IsSuperAdmin {
 		t.Error("Actor should be super admin")
 	}
-
-	// Verify target is not super admin
 	if target.IsSuperAdmin {
 		t.Error("Target should not be super admin initially")
 	}
 
-	// Simulate promotion
+	// Simulate promotion (documents expected field changes)
 	target.IsSuperAdmin = true
 	now := time.Now()
 	target.SuperAdminPromotedAt = &now
 	target.SuperAdminPromotedBy = &actorID
 
-	// Verify promotion
+	// Verify expected state after promotion
 	if !target.IsSuperAdmin {
 		t.Error("Target should be super admin after promotion")
 	}
@@ -121,6 +120,9 @@ func TestPromoteToSuperAdmin_Success(t *testing.T) {
 	}
 }
 
+// TestPromoteToSuperAdmin_AlreadySuperAdmin documents the precondition check.
+// NOTE: This is a model behavior test, not a service integration test.
+// The actual service method returns ErrAlreadySuperAdmin when target.IsSuperAdmin is true.
 func TestPromoteToSuperAdmin_AlreadySuperAdmin(t *testing.T) {
 	// Create target user who is already super admin
 	targetID := uuid.New()
@@ -132,11 +134,11 @@ func TestPromoteToSuperAdmin_AlreadySuperAdmin(t *testing.T) {
 		IsSuperAdmin: true,
 	}
 
-	// Should return error when already super admin
-	if target.IsSuperAdmin {
-		// This simulates the ErrAlreadySuperAdmin case
-		t.Log("Correctly identified user is already super admin")
+	// Document the precondition that triggers ErrAlreadySuperAdmin in the service
+	if !target.IsSuperAdmin {
+		t.Error("Test setup error: target should be super admin for this test case")
 	}
+	t.Log("Precondition verified: user already super admin triggers ErrAlreadySuperAdmin in service")
 }
 
 func TestPromoteToSuperAdmin_Unauthorized(t *testing.T) {

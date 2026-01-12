@@ -19,6 +19,20 @@ func NewAdminHandler(authService *auth.Service) *AdminHandler {
 	return &AdminHandler{authService: authService}
 }
 
+// getAuditContext extracts IP address and user agent from the request context for audit logging.
+func getAuditContext(c *gin.Context) (*string, *string) {
+	ipAddress := middleware.GetIPAddress(c)
+	userAgent := middleware.GetUserAgent(c)
+	var ipPtr, uaPtr *string
+	if ipAddress != "" {
+		ipPtr = &ipAddress
+	}
+	if userAgent != "" {
+		uaPtr = &userAgent
+	}
+	return ipPtr, uaPtr
+}
+
 // ListTeams returns all teams in the system (super admin only)
 func (h *AdminHandler) ListTeams(c *gin.Context) {
 	limit := 50
@@ -190,15 +204,7 @@ func (h *AdminHandler) PromoteUser(c *gin.Context) {
 	}
 
 	// Get audit context
-	ipAddress := middleware.GetIPAddress(c)
-	userAgent := middleware.GetUserAgent(c)
-	var ipPtr, uaPtr *string
-	if ipAddress != "" {
-		ipPtr = &ipAddress
-	}
-	if userAgent != "" {
-		uaPtr = &userAgent
-	}
+	ipPtr, uaPtr := getAuditContext(c)
 
 	user, err := h.authService.PromoteToSuperAdmin(c.Request.Context(), actorID, userID, ipPtr, uaPtr)
 	if err != nil {
@@ -238,15 +244,7 @@ func (h *AdminHandler) DemoteUser(c *gin.Context) {
 	}
 
 	// Get audit context
-	ipAddress := middleware.GetIPAddress(c)
-	userAgent := middleware.GetUserAgent(c)
-	var ipPtr, uaPtr *string
-	if ipAddress != "" {
-		ipPtr = &ipAddress
-	}
-	if userAgent != "" {
-		uaPtr = &userAgent
-	}
+	ipPtr, uaPtr := getAuditContext(c)
 
 	user, err := h.authService.DemoteFromSuperAdmin(c.Request.Context(), actorID, userID, ipPtr, uaPtr)
 	if err != nil {

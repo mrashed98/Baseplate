@@ -12,8 +12,10 @@ const (
 // AuditMiddleware extracts and sets audit information in context
 func AuditMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Use Gin's ClientIP which respects TrustedProxies configuration
-		// This prevents IP spoofing through X-Forwarded-For header manipulation
+		// Use Gin's ClientIP which respects TrustedProxies configuration.
+		// NOTE: IP spoofing prevention requires proper TrustedProxies setup in router.
+		// Without explicit SetTrustedProxies() configuration, Gin trusts all proxy headers by default.
+		// See: https://pkg.go.dev/github.com/gin-gonic/gin#Engine.SetTrustedProxies
 		ipAddress := c.ClientIP()
 
 		// Extract user agent

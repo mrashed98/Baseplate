@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -190,7 +191,12 @@ func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, ta
 		ResultStatus: &resultStatus,
 	}
 	// Log asynchronously to not block the response
-	go s.repo.CreateAuditLog(context.Background(), auditLog)
+	go func() {
+		if err := s.repo.CreateAuditLog(context.Background(), auditLog); err != nil {
+			log.Printf("ERROR: failed to create audit log for %s action on user %s: %v",
+				auditLog.Action, auditLog.EntityID, err)
+		}
+	}()
 
 	return target, nil
 }
@@ -278,7 +284,12 @@ func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, t
 		ResultStatus: &resultStatus,
 	}
 	// Log asynchronously to not block the response
-	go s.repo.CreateAuditLog(context.Background(), auditLog)
+	go func() {
+		if err := s.repo.CreateAuditLog(context.Background(), auditLog); err != nil {
+			log.Printf("ERROR: failed to create audit log for %s action on user %s: %v",
+				auditLog.Action, auditLog.EntityID, err)
+		}
+	}()
 
 	return target, nil
 }

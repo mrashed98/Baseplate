@@ -381,7 +381,7 @@ for i in {1..100}; do
   curl -w "%{time_total}s\n" -o /dev/null -s \
     "http://localhost:8080/api/admin/users" \
     -H "Authorization: Bearer $SUPER_ADMIN_TOKEN"
-done | awk '{sum+=$1; count++} END {print "Average: " sum/count "ms"}'
+done | awk '{sum+=$1; count++} END {print "Average: " sum/count "s"}'
 ```
 
 **Expected**: Average <50ms (well under 100ms p95 requirement)
