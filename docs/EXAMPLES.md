@@ -7,6 +7,7 @@ Comprehensive examples demonstrating real-world usage of Baseplate API.
 - [Getting Started](#getting-started)
 - [User Management](#user-management)
 - [Team Management](#team-management)
+- [Super Admin Management](#super-admin-management)
 - [Blueprint and Entity Workflows](#blueprint-and-entity-workflows)
 - [Advanced Search](#advanced-search)
 - [API Key Usage](#api-key-usage)
@@ -161,6 +162,163 @@ curl -s -X POST $BASE_URL/teams/$TEAM_ID/members \
 echo -e "\nListing team members..."
 curl -s -X GET $BASE_URL/teams/$TEAM_ID/members \
   -H "Authorization: Bearer $TOKEN" | jq '.members'
+```
+
+---
+
+## Super Admin Management
+
+### Promote and Demote Users
+
+```bash
+#!/bin/bash
+# Example: Super admin user management
+
+BASE_URL="http://localhost:8080/api"
+ADMIN_TOKEN="your-super-admin-jwt-token"
+
+# 1. List all users in the system
+echo "Listing all platform users..."
+curl -s -X GET "$BASE_URL/admin/users?limit=50&offset=0" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.users[] | {id, email, name, is_super_admin}'
+
+# 2. Get details for a specific user
+USER_ID="550e8400-e29b-41d4-a716-446655440000"
+echo -e "\nGetting user details and team memberships..."
+curl -s -X GET $BASE_URL/admin/users/$USER_ID \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.'
+
+# 3. Promote user to super admin
+echo -e "\nPromoting user to super admin..."
+curl -s -X POST $BASE_URL/admin/users/$USER_ID/promote \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" | jq '.'
+
+# Response includes: is_super_admin, super_admin_promoted_at, super_admin_promoted_by
+
+# 4. Update user details (name, status)
+echo -e "\nUpdating user details..."
+curl -s -X PUT $BASE_URL/admin/users/$USER_ID \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Name",
+    "status": "inactive"
+  }' | jq '.'
+
+# 5. Demote user from super admin
+echo -e "\nDemoting user from super admin..."
+curl -s -X POST $BASE_URL/admin/users/$USER_ID/demote \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" | jq '.'
+```
+
+### Cross-Team Resource Access
+
+```bash
+#!/bin/bash
+# Example: Super admin accessing resources across teams
+
+BASE_URL="http://localhost:8080/api"
+ADMIN_TOKEN="your-super-admin-jwt-token"
+
+# 1. List all teams (super admin can see all)
+echo "Listing all teams in the system..."
+curl -s -X GET $BASE_URL/admin/teams \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.teams[] | {id, name, slug}'
+
+# 2. Access any team details without membership
+TEAM_ID="team-uuid-here"
+echo -e "\nGetting team details (without membership)..."
+curl -s -X GET $BASE_URL/admin/teams/$TEAM_ID \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.'
+
+# 3. Access blueprints in any team
+echo -e "\nAccessing blueprints in any team..."
+curl -s -X GET $BASE_URL/blueprints \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "X-Team-ID: $TEAM_ID" | jq '.blueprints[] | {id, title}'
+
+# 4. List entities in any team
+echo -e "\nListing entities in any team..."
+curl -s -X GET $BASE_URL/blueprints/service/entities \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "X-Team-ID: $TEAM_ID" | jq '.entities[] | {id, identifier, title}'
+
+# 5. Delete resources in any team (with caution!)
+echo -e "\nDeleting a team (administrative action)..."
+curl -X DELETE $BASE_URL/teams/$TEAM_ID \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -w "\nStatus: %{http_code}\n"
+```
+
+### Audit Trail Review
+
+```bash
+#!/bin/bash
+# Example: Reviewing super admin actions
+
+BASE_URL="http://localhost:8080/api"
+ADMIN_TOKEN="your-super-admin-jwt-token"
+
+# 1. Query all audit logs
+echo "Retrieving super admin audit logs..."
+curl -s -X GET "$BASE_URL/admin/audit-logs?limit=50&offset=0" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.logs[] | {id, user_id, action, entity_type, ip_address, created_at}'
+
+# 2. Example: Find all promotions
+echo -e "\nFinding all user promotions..."
+curl -s -X GET "$BASE_URL/admin/audit-logs?limit=100&offset=0" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.logs[] | select(.action=="promote") | {user_id, action, entity_id, created_at}'
+
+# 3. Example: Find all team deletions
+echo -e "\nFinding all team deletions..."
+curl -s -X GET "$BASE_URL/admin/audit-logs?limit=100&offset=0" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.logs[] | select(.action=="delete" and .entity_type=="team") | {user_id, entity_id, created_at}'
+
+# 4. Example: Find actions from specific IP
+echo -e "\nFinding actions from specific IP..."
+SUSPICIOUS_IP="192.168.1.100"
+curl -s -X GET "$BASE_URL/admin/audit-logs?limit=100&offset=0" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq ".logs[] | select(.ip_address==\"$SUSPICIOUS_IP\") | {user_id, action, ip_address, created_at}"
+
+# 5. Inspect detailed audit log entry
+LOG_ID="log-uuid-here"
+curl -s -X GET "$BASE_URL/admin/audit-logs/$LOG_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.'
+```
+
+### Initial Super Admin Setup
+
+```bash
+#!/bin/bash
+# Example: Initialize first super admin (typically run by DevOps/Admin)
+
+# Set up credentials (in production, use secrets manager)
+export SUPER_ADMIN_EMAIL="platform-admin@company.com"
+export SUPER_ADMIN_PASSWORD="strong-secure-password-here"
+
+# Run initialization command
+make init-superadmin
+
+# Output:
+# Super admin created successfully!
+# Email: platform-admin@company.com
+# Created at: 2024-01-15T10:30:00Z
+
+# Now login to get token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "platform-admin@company.com",
+    "password": "strong-secure-password-here"
+  }' | jq -r '.token')
+
+echo "Super admin token: $TOKEN"
+
+# Verify super admin status
+curl -s -X GET http://localhost:8080/api/auth/me \
+  -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
 ---

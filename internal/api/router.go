@@ -15,6 +15,7 @@ type Router struct {
 	teamHandler      *handlers.TeamHandler
 	blueprintHandler *handlers.BlueprintHandler
 	entityHandler    *handlers.EntityHandler
+	adminHandler     *handlers.AdminHandler
 }
 
 func NewRouter(
@@ -23,6 +24,7 @@ func NewRouter(
 	teamHandler *handlers.TeamHandler,
 	blueprintHandler *handlers.BlueprintHandler,
 	entityHandler *handlers.EntityHandler,
+	adminHandler *handlers.AdminHandler,
 ) *Router {
 	return &Router{
 		authMiddleware:   middleware.NewAuthMiddleware(authService),
@@ -30,6 +32,7 @@ func NewRouter(
 		teamHandler:      teamHandler,
 		blueprintHandler: blueprintHandler,
 		entityHandler:    entityHandler,
+		adminHandler:     adminHandler,
 	}
 }
 
@@ -39,6 +42,7 @@ func (r *Router) Setup(mode string) *gin.Engine {
 	r.engine.Use(gin.Recovery())
 	r.engine.Use(gin.Logger())
 	r.engine.Use(middleware.ErrorHandler())
+	r.engine.Use(middleware.AuditMiddleware())
 
 	r.setupRoutes()
 	return r.engine
@@ -122,6 +126,25 @@ func (r *Router) setupRoutes() {
 			entities.GET("/:id", r.authMiddleware.RequirePermission(auth.PermEntityRead), r.entityHandler.Get)
 			entities.PUT("/:id", r.authMiddleware.RequirePermission(auth.PermEntityWrite), r.entityHandler.Update)
 			entities.DELETE("/:id", r.authMiddleware.RequirePermission(auth.PermEntityDelete), r.entityHandler.Delete)
+		}
+
+		// Admin routes (super admin only)
+		admin := protected.Group("/admin")
+		admin.Use(r.authMiddleware.RequireSuperAdmin())
+		{
+			// Team management
+			admin.GET("/teams", r.adminHandler.ListTeams)
+			admin.GET("/teams/:teamId", r.adminHandler.GetTeamDetail)
+
+			// User management
+			admin.GET("/users", r.adminHandler.ListUsers)
+			admin.GET("/users/:userId", r.adminHandler.GetUserDetail)
+			admin.PUT("/users/:userId", r.adminHandler.UpdateUser)
+			admin.POST("/users/:userId/promote", r.adminHandler.PromoteUser)
+			admin.POST("/users/:userId/demote", r.adminHandler.DemoteUser)
+
+			// Audit logs
+			admin.GET("/audit-logs", r.adminHandler.QueryAuditLogs)
 		}
 	}
 }

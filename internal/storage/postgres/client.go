@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -35,4 +36,8 @@ func NewClient(cfg *config.DatabaseConfig) (*Client, error) {
 
 func (c *Client) Close() error {
 	return c.DB.Close()
+}
+
+func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	return c.DB.BeginTx(ctx, opts)
 }

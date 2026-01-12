@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -23,6 +24,9 @@ var (
 	ErrNotFound           = errors.New("not found")
 	ErrUnauthorized       = errors.New("unauthorized")
 	ErrForbidden          = errors.New("forbidden")
+	ErrLastSuperAdmin     = errors.New("cannot demote the last super admin")
+	ErrAlreadySuperAdmin  = errors.New("user is already a super admin")
+	ErrNotSuperAdmin      = errors.New("user is not a super admin")
 )
 
 type Service struct {
@@ -35,8 +39,9 @@ func NewService(repo *Repository, cfg *config.JWTConfig) *Service {
 }
 
 type JWTClaims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Email  string    `json:"email"`
+	UserID       uuid.UUID `json:"user_id"`
+	Email        string    `json:"email"`
+	IsSuperAdmin *bool     `json:"is_super_admin,omitempty"` // Pointer for graceful degradation with old tokens
 	jwt.RegisteredClaims
 }
 
@@ -100,10 +105,223 @@ func (s *Service) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) 
 	return s.repo.GetUserByID(ctx, id)
 }
 
+// CheckSuperAdminStatus verifies if a user is a super admin by checking the database.
+// This is used to validate JWT claims against the current DB state (for demotion detection).
+func (s *Service) CheckSuperAdminStatus(ctx context.Context, userID uuid.UUID) (bool, error) {
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if user == nil {
+		return false, nil
+	}
+	return user.IsSuperAdmin, nil
+}
+
+func (s *Service) GetAllUsers(ctx context.Context, limit int, offset int) ([]*User, error) {
+	return s.repo.GetAllUsers(ctx, limit, offset)
+}
+
+func (s *Service) GetUserDetail(ctx context.Context, userID uuid.UUID) (*User, []*TeamMembership, error) {
+	return s.repo.GetUserWithMemberships(ctx, userID)
+}
+
+func (s *Service) UpdateUser(ctx context.Context, user *User) error {
+	return s.repo.UpdateUser(ctx, user)
+}
+
+func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID, ipAddress, userAgent *string) (*User, error) {
+	// Verify actor is super admin
+	actor, err := s.repo.GetUserByID(ctx, actorID)
+	if err != nil {
+		return nil, err
+	}
+	if actor == nil || !actor.IsSuperAdmin {
+		return nil, ErrUnauthorized
+	}
+
+	// Get target user
+	target, err := s.repo.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, ErrNotFound
+	}
+
+	// Check if already super admin
+	if target.IsSuperAdmin {
+		return nil, ErrAlreadySuperAdmin
+	}
+
+	// Capture old state for audit log
+	oldData := map[string]any{
+		"is_super_admin":          target.IsSuperAdmin,
+		"super_admin_promoted_at": target.SuperAdminPromotedAt,
+		"super_admin_promoted_by": target.SuperAdminPromotedBy,
+	}
+
+	// Use transaction with conditional update to prevent race conditions
+	// The UPDATE only succeeds if is_super_admin is still false
+	tx, err := s.repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Conditional update: only promote if still not super admin
+	if err := s.repo.UpdateUserSuperAdminStatus(ctx, tx, targetUserID, true, &actorID); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// Update local target object to reflect changes
+	target.IsSuperAdmin = true
+	now := time.Now()
+	target.SuperAdminPromotedAt = &now
+	target.SuperAdminPromotedBy = &actorID
+
+	// Create audit log
+	resultStatus := "success"
+	auditLog := &AuditLog{
+		ID:         uuid.New(),
+		UserID:     &actorID,
+		ActorType:  "super_admin",
+		EntityType: "user",
+		EntityID:   targetUserID.String(),
+		Action:     "promote",
+		OldData:    oldData,
+		NewData: map[string]any{
+			"is_super_admin":          target.IsSuperAdmin,
+			"super_admin_promoted_at": target.SuperAdminPromotedAt,
+			"super_admin_promoted_by": target.SuperAdminPromotedBy,
+		},
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		ResultStatus: &resultStatus,
+	}
+	// Log asynchronously to not block the response
+	go func() {
+		if err := s.repo.CreateAuditLog(context.Background(), auditLog); err != nil {
+			log.Printf("ERROR: failed to create audit log for %s action on user %s: %v",
+				auditLog.Action, auditLog.EntityID, err)
+		}
+	}()
+
+	return target, nil
+}
+
+func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, targetUserID uuid.UUID, ipAddress, userAgent *string) (*User, error) {
+	// Verify actor is super admin
+	actor, err := s.repo.GetUserByID(ctx, actorID)
+	if err != nil {
+		return nil, err
+	}
+	if actor == nil || !actor.IsSuperAdmin {
+		return nil, ErrUnauthorized
+	}
+
+	// Get target user
+	target, err := s.repo.GetUserByID(ctx, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, ErrNotFound
+	}
+
+	// Check if not super admin
+	if !target.IsSuperAdmin {
+		return nil, ErrNotSuperAdmin
+	}
+
+	// Capture old state for audit log
+	oldData := map[string]any{
+		"is_super_admin":          target.IsSuperAdmin,
+		"super_admin_promoted_at": target.SuperAdminPromotedAt,
+		"super_admin_promoted_by": target.SuperAdminPromotedBy,
+	}
+
+	// Start transaction with FOR UPDATE lock
+	tx, err := s.repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Count super admins with lock
+	count, err := s.repo.CountSuperAdminsForUpdate(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prevent demotion of last super admin
+	if count <= 1 {
+		return nil, ErrLastSuperAdmin
+	}
+
+	// Update user status
+	if err := s.repo.UpdateUserSuperAdminStatus(ctx, tx, targetUserID, false, nil); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// Update local target object to reflect changes (no DB fetch needed)
+	target.IsSuperAdmin = false
+	target.SuperAdminPromotedAt = nil
+	target.SuperAdminPromotedBy = nil
+
+	// Create audit log
+	resultStatus := "success"
+	auditLog := &AuditLog{
+		ID:         uuid.New(),
+		UserID:     &actorID,
+		ActorType:  "super_admin",
+		EntityType: "user",
+		EntityID:   targetUserID.String(),
+		Action:     "demote",
+		OldData:    oldData,
+		NewData: map[string]any{
+			"is_super_admin":          target.IsSuperAdmin,
+			"super_admin_promoted_at": target.SuperAdminPromotedAt,
+			"super_admin_promoted_by": target.SuperAdminPromotedBy,
+		},
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		ResultStatus: &resultStatus,
+	}
+	// Log asynchronously to not block the response
+	go func() {
+		if err := s.repo.CreateAuditLog(context.Background(), auditLog); err != nil {
+			log.Printf("ERROR: failed to create audit log for %s action on user %s: %v",
+				auditLog.Action, auditLog.EntityID, err)
+		}
+	}()
+
+	return target, nil
+}
+
+// GetSuperAdminAuditLogs returns audit logs for super admin actions
+func (s *Service) GetSuperAdminAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditLog, error) {
+	return s.repo.GetSuperAdminAuditLogs(ctx, limit, offset)
+}
+
+func (s *Service) CreateAuditLog(ctx context.Context, log *AuditLog) error {
+	return s.repo.CreateAuditLog(ctx, log)
+}
+
 func (s *Service) generateToken(user *User) (string, error) {
+	isSuperAdmin := user.IsSuperAdmin
 	claims := JWTClaims{
-		UserID: user.ID,
-		Email:  user.Email,
+		UserID:       user.ID,
+		Email:        user.Email,
+		IsSuperAdmin: &isSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.config.ExpirationDuration())),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -127,6 +345,11 @@ func (s *Service) ValidateToken(tokenString string) (*JWTClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+		// Graceful degradation: default missing is_super_admin claim to false for older tokens
+		if claims.IsSuperAdmin == nil {
+			falseValue := false
+			claims.IsSuperAdmin = &falseValue
+		}
 		return claims, nil
 	}
 	return nil, ErrUnauthorized
@@ -210,6 +433,10 @@ func (s *Service) GetTeam(ctx context.Context, id uuid.UUID) (*Team, error) {
 
 func (s *Service) GetTeamsByUser(ctx context.Context, userID uuid.UUID) ([]*Team, error) {
 	return s.repo.GetTeamsByUserID(ctx, userID)
+}
+
+func (s *Service) GetAllTeams(ctx context.Context, limit, offset int) ([]*Team, error) {
+	return s.repo.GetAllTeams(ctx, limit, offset)
 }
 
 func (s *Service) UpdateTeam(ctx context.Context, team *Team) error {

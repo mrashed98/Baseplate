@@ -1,0 +1,552 @@
+openapi: 3.0.3
+info:
+  title: Baseplate Super Admin API
+  description: Platform-level administration endpoints for managing users, teams, and super admin roles
+  version: 1.0.0
+  contact:
+    name: Baseplate API Support
+
+servers:
+  - url: http://localhost:8080/api
+    description: Local development
+  - url: https://api.baseplate.example.com/api
+    description: Production
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Super Admin - Users
+    description: Platform-wide user management
+  - name: Super Admin - Teams
+    description: Platform-wide team management
+  - name: Super Admin - Roles
+    description: Super admin promotion/demotion
+  - name: Super Admin - Audit
+    description: Super admin audit trail queries
+
+paths:
+  /admin/users:
+    get:
+      summary: List all users
+      description: Retrieve all users across all teams (super admin only)
+      tags: [Super Admin - Users]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: status
+          in: query
+          description: Filter by user status
+          schema:
+            type: string
+            enum: [active, deleted]
+        - name: is_super_admin
+          in: query
+          description: Filter by super admin status
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  total:
+                    type: integer
+                    description: Total count of users matching filter
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/users/{userId}:
+    get:
+      summary: Get user details
+      description: Retrieve detailed user information including all team memberships
+      tags: [Super Admin - Users]
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      summary: Update user
+      description: Update user status or details (super admin only)
+      tags: [Super Admin - Users]
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                status:
+                  type: string
+                  enum: [active, deleted]
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{userId}/promote:
+    post:
+      summary: Promote user to super admin
+      description: Grant super admin privileges to a user
+      tags: [Super Admin - Roles]
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: User promoted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User promoted to super admin
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: User already super admin or invalid status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{userId}/demote:
+    post:
+      summary: Demote super admin to regular user
+      description: Revoke super admin privileges (cannot demote last super admin)
+      tags: [Super Admin - Roles]
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: User demoted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User demoted from super admin
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: User is not super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Cannot demote last super admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: LAST_SUPER_ADMIN
+                  message: Cannot demote the last super admin
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/teams:
+    get:
+      summary: List all teams
+      description: Retrieve all teams across the platform (super admin only)
+      tags: [Super Admin - Teams]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  teams:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/teams/{teamId}:
+    get:
+      summary: Get team details
+      description: Retrieve detailed team information including members
+      tags: [Super Admin - Teams]
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/audit-logs:
+    get:
+      summary: Query super admin audit logs
+      description: Retrieve detailed audit trail of super admin actions
+      tags: [Super Admin - Audit]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: user_id
+          in: query
+          description: Filter by specific super admin user
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          description: Filter by action type
+          schema:
+            type: string
+            enum: [create, read, update, delete, promote, demote]
+        - name: entity_type
+          in: query
+          description: Filter by entity type
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          description: Start date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          description: End date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token with super admin claim
+
+  parameters:
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      description: User UUID
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    User:
+      type: object
+      required: [id, email, name, status, is_super_admin, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, deleted]
+        is_super_admin:
+          type: boolean
+        super_admin_promoted_at:
+          type: string
+          format: date-time
+          nullable: true
+        super_admin_promoted_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    UserDetail:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            team_memberships:
+              type: array
+              items:
+                type: object
+                properties:
+                  team_id:
+                    type: string
+                    format: uuid
+                  team_name:
+                    type: string
+                  role_id:
+                    type: string
+                    format: uuid
+                  role_name:
+                    type: string
+
+    Team:
+      type: object
+      required: [id, name, slug, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TeamDetail:
+      allOf:
+        - $ref: '#/components/schemas/Team'
+        - type: object
+          properties:
+            member_count:
+              type: integer
+            resource_counts:
+              type: object
+              properties:
+                blueprints:
+                  type: integer
+                entities:
+                  type: integer
+
+    AuditLog:
+      type: object
+      required: [id, actor_type, entity_type, action, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+          nullable: true
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_type:
+          type: string
+          enum: [team_member, super_admin, api_key]
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        action:
+          type: string
+          enum: [create, read, update, delete, promote, demote]
+        old_data:
+          type: object
+          nullable: true
+        new_data:
+          type: object
+          nullable: true
+        ip_address:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        result_status:
+          type: string
+          enum: [success, failure, partial]
+          nullable: true
+        request_context:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Invalid request parameters
+
+    Unauthorized:
+      description: Unauthorized - invalid or missing JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Invalid or missing authentication token
+
+    Forbidden:
+      description: Forbidden - requires super admin access
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: FORBIDDEN
+              message: Super admin access required
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found
