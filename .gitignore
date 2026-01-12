@@ -1,2 +1,10 @@
 # Auto Claude data directory
 .auto-claude/
+
+# Build artifacts
+bin/
+server
+*.exe
+*.dll
+*.so
+*.dylib

@@ -32,6 +32,11 @@ type JWTConfig struct {
 }
 
 func Load() *Config {
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		panic("JWT_SECRET environment variable is required and cannot be empty")
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Port: getEnv("SERVER_PORT", "8080"),
@@ -46,7 +51,7 @@ func Load() *Config {
 			SSLMode:  getEnv("DB_SSL_MODE", "disable"),
 		},
 		JWT: JWTConfig{
-			Secret:          getEnv("JWT_SECRET", ""),
+			Secret:          jwtSecret,
 			ExpirationHours: getEnvInt("JWT_EXPIRATION_HOURS", 24),
 		},
 	}
