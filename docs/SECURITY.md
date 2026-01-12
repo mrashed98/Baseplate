@@ -167,7 +167,31 @@ if len(password) < 8 {
 
 ## Authorization
 
-Baseplate implements Role-Based Access Control (RBAC) with team-scoped permissions.
+Baseplate implements Role-Based Access Control (RBAC) with team-scoped permissions and platform-level super admin access.
+
+### Super Admin Role
+
+**Overview**:
+Super admins have platform-level administrative access, bypassing all team-level permission checks. They can manage all teams, users, and resources in the system.
+
+**Key Properties**:
+- Global access to all teams and resources
+- Bypass team membership verification
+- Promotion/demotion capabilities
+- Audit trail of all super admin actions
+- Last super admin protection prevents system lockout
+
+**Implementation**: `internal/core/auth/service.go` - `PromoteToSuperAdmin`, `DemoteFromSuperAdmin`
+
+**Middleware**: `internal/api/middleware/auth.go` - `RequireSuperAdmin()`, `IsSuperAdmin()`
+
+**Security Guarantees**:
+- JWT-based super admin claim with graceful degradation
+- Transaction-safe demotion with SELECT FOR UPDATE locking
+- Comprehensive audit logging with IP address and user agent capture
+- Cannot demote last super admin (prevents system lockout)
+
+---
 
 ### Permission Model
 
@@ -622,6 +646,154 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
 
 ---
 
+## Super Admin Security
+
+### Authentication & JWT
+
+**Super Admin Claim**:
+- Embedded in JWT token at login/registration
+- Claim: `is_super_admin: true` (boolean)
+- Graceful degradation: old tokens without claim default to `false`
+- Prevents privilege escalation via token forgery (signed with JWT_SECRET)
+
+**Token Extension**:
+```go
+type JWTClaims struct {
+    UserID      string `json:"user_id"`
+    Email       string `json:"email"`
+    IsSuperAdmin *bool `json:"is_super_admin"` // Pointer for backward compatibility
+    IssuedAt    int64 `json:"iat"`
+    ExpiresAt   int64 `json:"exp"`
+}
+```
+
+**Location**: `internal/core/auth/service.go:103-137`
+
+---
+
+### Authorization & Middleware
+
+**RequireSuperAdmin Middleware**:
+Enforces that user has `is_super_admin` claim set to `true` before allowing access to admin endpoints.
+
+```go
+func (m *AuthMiddleware) RequireSuperAdmin() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        if !m.IsSuperAdmin(c) {
+            c.AbortWithStatusJSON(403, gin.H{"error": "super admin privileges required"})
+            return
+        }
+        c.Next()
+    }
+}
+```
+
+**Permission Bypass**:
+Super admins automatically receive `AllPermissions` in context, bypassing team-level checks.
+
+```go
+if m.IsSuperAdmin(c) {
+    // Set all permissions in context
+    c.Set("permissions", AllPermissions)
+    return
+}
+```
+
+**Location**: `internal/api/middleware/auth.go`
+
+---
+
+### Transaction Safety (Demotion Protection)
+
+**Last Super Admin Protection**:
+Prevents demotion of the only remaining super admin via database transaction with pessimistic locking.
+
+**Implementation**:
+1. Start transaction
+2. Execute `SELECT COUNT(*) FROM users WHERE is_super_admin = true FOR UPDATE` (pessimistic lock)
+3. Check if count == 1 (only super admin left)
+4. If yes, return `ErrLastSuperAdmin` error
+5. If no, execute UPDATE to remove super admin status
+6. Commit transaction
+
+**Prevents Race Condition**:
+- `FOR UPDATE` lock ensures no concurrent demotion of the last super admin
+- Atomic operation: count check + update within single transaction
+- Other super admins cannot demote themselves or each other simultaneously
+
+**Code**: `internal/core/auth/service.go:DemoteFromSuperAdmin()`
+
+---
+
+### Audit Logging
+
+**Super Admin Actions Tracked**:
+- User promotion to super admin
+- User demotion from super admin
+- Team management (list, view)
+- User management (list, view, update)
+- API key operations (if performed by super admin)
+
+**Captured Metadata**:
+```go
+type AuditLog struct {
+    ID             uuid.UUID `json:"id"`
+    UserID         uuid.UUID `json:"user_id"`
+    ActorType      string    `json:"actor_type"` // "super_admin", "team_member", "api_key"
+    EntityType     string    `json:"entity_type"` // "user", "team", etc.
+    EntityID       string    `json:"entity_id"`
+    Action         string    `json:"action"` // "promote", "demote", "update", etc.
+    IPAddress      string    `json:"ip_address"`
+    UserAgent      string    `json:"user_agent"`
+    ResultStatus   string    `json:"result_status"` // "success", "failure", "partial"
+    RequestContext interface{} `json:"request_context"`
+    OldData        interface{} `json:"old_data"`
+    NewData        interface{} `json:"new_data"`
+    CreatedAt      time.Time `json:"created_at"`
+}
+```
+
+**Audit Log Access**:
+- `GET /api/admin/audit-logs` - Query all super admin actions with pagination
+- Super admins can review complete audit trail for compliance
+- IP address extraction with `X-Forwarded-For` fallback for proxy environments
+
+**Location**: `internal/api/middleware/audit.go`, `internal/core/auth/service.go`
+
+---
+
+### Best Practices for Super Admin Management
+
+**Minimize Super Admin Accounts**:
+- Keep number of super admins minimal (ideally 2-3 for redundancy)
+- Each promotion increases risk surface area
+- Document reason for each promotion
+
+**Monitor Audit Logs**:
+- Review super admin actions regularly
+- Alert on unusual patterns:
+  - Off-hours access
+  - Multiple failed demotion attempts
+  - Bulk user operations
+  - Team deletion
+
+**Secure Initial Setup**:
+- Use strong password for initial super admin (12+ characters)
+- Store securely in secrets manager, not committed to repo
+- `make init-superadmin` tool requires `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` environment variables
+
+**Rotation Policy**:
+- Rotate super admin privileges quarterly
+- Demote and re-promote to validate demotion process
+- Prevents privilege creep
+
+**API Key Restrictions**:
+- API keys cannot have super admin privileges
+- API keys are team-scoped only
+- For super admin operations, require JWT token
+
+---
+
 ## Security Checklist
 
 ### Pre-Deployment
@@ -634,12 +806,16 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
 - [ ] Secrets stored in secrets manager (not env files)
 - [ ] CORS properly configured
 - [ ] Rate limiting implemented
+- [ ] **Initial super admin created** (`make init-superadmin`)
+- [ ] Super admin credentials stored securely (not in code)
 
 ### Post-Deployment
 
 - [ ] Monitor authentication logs
 - [ ] Review API key usage patterns
 - [ ] Audit team memberships and roles
+- [ ] **Review super admin audit logs** (`GET /api/admin/audit-logs`)
+- [ ] **Verify last super admin protection** (test demotion validation)
 - [ ] Test backup restoration process
 - [ ] Review database connection limits
 - [ ] Check for SQL injection vulnerabilities

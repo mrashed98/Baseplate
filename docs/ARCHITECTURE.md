@@ -55,13 +55,16 @@ graph TB
         ROUTER[Gin Router]
         MW_AUTH[Auth Middleware]
         MW_TEAM[Team Context Middleware]
+        MW_SUPER[Super Admin Check]
         MW_PERM[Permission Middleware]
+        MW_AUDIT[Audit Middleware]
         MW_ERR[Error Handler]
 
         HANDLER_AUTH[Auth Handler]
         HANDLER_TEAM[Team Handler]
         HANDLER_BP[Blueprint Handler]
         HANDLER_ENT[Entity Handler]
+        HANDLER_ADMIN[Admin Handler]
     end
 
     subgraph "Service Layer"
@@ -87,17 +90,21 @@ graph TB
     SERVICE --> ROUTER
 
     ROUTER --> MW_ERR
-    MW_ERR --> MW_AUTH
+    MW_ERR --> MW_AUDIT
+    MW_AUDIT --> MW_AUTH
     MW_AUTH --> MW_TEAM
-    MW_TEAM --> MW_PERM
+    MW_TEAM --> MW_SUPER
+    MW_SUPER --> MW_PERM
 
     MW_PERM --> HANDLER_AUTH
     MW_PERM --> HANDLER_TEAM
     MW_PERM --> HANDLER_BP
     MW_PERM --> HANDLER_ENT
+    MW_PERM --> HANDLER_ADMIN
 
     HANDLER_AUTH --> SVC_AUTH
     HANDLER_TEAM --> SVC_AUTH
+    HANDLER_ADMIN --> SVC_AUTH
     HANDLER_BP --> SVC_BP
     HANDLER_ENT --> SVC_ENT
 
@@ -190,27 +197,30 @@ graph LR
     A[Request] --> B[gin.Recovery]
     B --> C[gin.Logger]
     C --> D[ErrorHandler]
-    D --> E[Authenticate]
-    E --> F{Auth Type}
+    D --> E[AuditMiddleware]
+    E --> F[Authenticate]
+    F --> G{Auth Type}
 
-    F -->|JWT| G[Extract user_id]
-    F -->|API Key| H[Extract user_id + team_id + permissions]
+    G -->|JWT| H[Extract user_id + is_super_admin]
+    G -->|API Key| I[Extract user_id + team_id + permissions]
 
-    G --> I[RequireTeam]
-    H --> I
+    H --> J[RequireTeam]
+    I --> J
 
-    I --> J{Team Needed?}
-    J -->|Yes| K[Extract team_id from URL/Header]
-    J -->|No| M[RequirePermission]
+    J --> K{Team Needed?}
+    K -->|Yes| L[Extract team_id from URL/Header]
+    K -->|No| M[RequireSuperAdmin]
 
-    K --> L[Verify team access]
-    L --> M
+    L --> M{Is Super Admin?}
+    M -->|Yes| N[Grant AllPermissions]
+    M -->|No| O[RequirePermission]
 
-    M --> N{Has Permission?}
-    N -->|Yes| O[Handler]
-    N -->|No| P[403 Forbidden]
+    N --> P[Handler]
+    O --> Q{Has Permission?}
+    Q -->|Yes| P
+    Q -->|No| R[403 Forbidden]
 
-    O --> Q[Response]
+    P --> S[Response]
 ```
 
 ## Database Schema

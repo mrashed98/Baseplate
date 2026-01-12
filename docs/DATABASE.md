@@ -67,6 +67,9 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(100),
     status VARCHAR(20) DEFAULT 'active',
+    is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    super_admin_promoted_at TIMESTAMP WITH TIME ZONE,
+    super_admin_promoted_by UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -77,10 +80,17 @@ CREATE TABLE users (
 - `password_hash`: bcrypt hash of password
 - `name`: Display name
 - `status`: `active` | `inactive` | `suspended`
+- `is_super_admin`: Platform-level admin status (boolean, default FALSE)
+- `super_admin_promoted_at`: Timestamp when promoted to super admin (nullable)
+- `super_admin_promoted_by`: UUID of super admin who promoted this user (nullable, self-referential)
 - `created_at`: Registration timestamp
 
 **Constraints**:
 - `email` must be unique
+- `super_admin_promoted_by` references `users(id)` with ON DELETE SET NULL
+
+**Indexes**:
+- `idx_users_super_admin`: Partial index on `is_super_admin WHERE is_super_admin = true` for efficient super admin lookups
 - `password_hash` never returned in API responses
 
 **Growth**: Slow (per user registration)
@@ -397,7 +407,55 @@ Workflow automation (planned feature).
 
 #### `audit_logs`
 
-Change history tracking (planned feature).
+Audit trail for tracking all actions in the system, with enhanced tracking for super admin operations.
+
+```sql
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    actor_type VARCHAR(20) NOT NULL DEFAULT 'team_member' CHECK (actor_type IN ('team_member', 'super_admin', 'api_key')),
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id VARCHAR(255),
+    action VARCHAR(20) NOT NULL,
+    old_data JSONB,
+    new_data JSONB,
+    ip_address INET,
+    user_agent TEXT,
+    result_status VARCHAR(20) CHECK (result_status IN ('success', 'failure', 'partial')),
+    request_context JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Columns**:
+- `id`: Unique log entry identifier
+- `team_id`: Team context (NULL for cross-team actions)
+- `user_id`: Actor performing the action
+- `actor_type`: Type of actor (`team_member`, `super_admin`, `api_key`)
+- `entity_type`: Type of entity affected (e.g., `user`, `team`, `blueprint`)
+- `entity_id`: ID of the entity affected
+- `action`: Action performed (e.g., `create`, `update`, `delete`, `promote`, `demote`)
+- `old_data`: State before modification (JSONB snapshot)
+- `new_data`: State after modification (JSONB snapshot)
+- `ip_address`: Client IP address (IPv4/IPv6)
+- `user_agent`: Client user agent string
+- `result_status`: Operation outcome (`success`, `failure`, `partial`)
+- `request_context`: Full request context including headers (JSONB)
+- `created_at`: Timestamp of action
+
+**Constraints**:
+- `actor_type` must be one of the valid types (check constraint)
+- `result_status` must be valid if set (check constraint)
+- `team_id` and `user_id` references with ON DELETE SET NULL to preserve history
+
+**Indexes**:
+- `idx_audit_logs_team`: B-tree on `team_id` for team-scoped queries
+- `idx_audit_logs_entity`: B-tree on `(entity_type, entity_id)` for entity-specific history
+- `idx_audit_logs_created`: B-tree on `created_at DESC` for time-range queries
+- `idx_audit_logs_actor_type`: Partial index on `actor_type WHERE actor_type = 'super_admin'` for efficient super admin action tracking
+
+**Growth**: Fast (per action taken by any user)
 
 ---
 

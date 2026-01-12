@@ -9,6 +9,7 @@ Complete REST API reference for Baseplate - a headless backend engine with dynam
 - [Team Context](#team-context)
 - [Permissions](#permissions)
 - [Error Handling](#error-handling)
+- [Super Admin](#super-admin)
 - [Endpoints](#endpoints)
   - [Health Check](#health-check)
   - [Authentication](#authentication-endpoints)
@@ -18,6 +19,7 @@ Complete REST API reference for Baseplate - a headless backend engine with dynam
   - [API Keys](#api-key-management)
   - [Blueprints](#blueprint-management)
   - [Entities](#entity-management)
+  - [Admin - Super Admin Only](#admin-super-admin-only)
 - [Examples](#examples)
 
 ## Overview
@@ -127,6 +129,43 @@ Read-only access to all resources.
   ]
 }
 ```
+
+## Super Admin
+
+### Overview
+
+The Super Admin role provides platform-level administrative access. Super admins can:
+- Manage all teams in the system
+- Manage all users across the platform
+- Promote and demote other users to/from super admin
+- Access and modify resources in any team without membership
+- View comprehensive audit logs of all super admin actions
+
+### Authorization
+
+Super admin status is verified through:
+1. **JWT Claim**: `is_super_admin: true` in the JWT token
+2. **Middleware**: `RequireSuperAdmin()` enforces authorization on sensitive endpoints
+3. **Permission Bypass**: Super admins bypass all team-level permission checks
+
+### Super Admin Endpoints
+
+See [Admin - Super Admin Only](#admin-super-admin-only) section for complete endpoint reference.
+
+**Key Endpoints**:
+- `GET /api/admin/teams` - List all teams
+- `GET /api/admin/users` - List all users
+- `POST /api/admin/users/:userId/promote` - Promote to super admin
+- `POST /api/admin/users/:userId/demote` - Demote from super admin
+- `GET /api/admin/audit-logs` - Query super admin actions
+
+### Error Cases
+
+| Status | Error | Meaning |
+|--------|-------|---------|
+| 403 | Forbidden | User is not a super admin |
+| 409 | Conflict | Cannot demote the last super admin |
+| 400 | Bad Request | User already super admin or not a super admin |
 
 ## Error Handling
 
@@ -1535,6 +1574,253 @@ X-Team-ID: 660e8400-e29b-41d4-a716-446655440001
 - `403` - Permission denied
 - `404` - Entity not found
 - `500` - Server error
+
+---
+
+## Admin - Super Admin Only
+
+All admin endpoints require super admin privileges and are protected by the `RequireSuperAdmin()` middleware.
+
+### Team Management
+
+#### List All Teams
+
+```
+GET /api/admin/teams
+```
+
+Lists all teams in the system regardless of membership.
+
+**Headers**:
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Response** (200 OK):
+```json
+{
+  "teams": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Team Name",
+      "slug": "team-name",
+      "created_at": "2026-01-12T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### Get Team Details
+
+```
+GET /api/admin/teams/:teamId
+```
+
+View details for a specific team.
+
+**Parameters**:
+- `teamId` (required) - UUID of the team
+
+**Response** (200 OK):
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Team Name",
+  "slug": "team-name",
+  "created_at": "2026-01-12T10:00:00Z"
+}
+```
+
+### User Management
+
+#### List All Users
+
+```
+GET /api/admin/users?limit=50&offset=0
+```
+
+Lists all platform users with pagination.
+
+**Query Parameters**:
+- `limit` (optional) - Items per page, max 500, default 50
+- `offset` (optional) - Pagination offset, default 0
+
+**Response** (200 OK):
+```json
+{
+  "users": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "email": "user@example.com",
+      "name": "User Name",
+      "status": "active",
+      "is_super_admin": false,
+      "created_at": "2026-01-12T10:00:00Z"
+    }
+  ],
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### Get User Details
+
+```
+GET /api/admin/users/:userId
+```
+
+View user details including team memberships.
+
+**Parameters**:
+- `userId` (required) - UUID of the user
+
+**Response** (200 OK):
+```json
+{
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "name": "User Name",
+    "is_super_admin": false,
+    "created_at": "2026-01-12T10:00:00Z"
+  },
+  "memberships": [
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440000",
+      "team_id": "770e8400-e29b-41d4-a716-446655440000",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "role_id": "880e8400-e29b-41d4-a716-446655440000",
+      "created_at": "2026-01-12T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### Update User
+
+```
+PUT /api/admin/users/:userId
+```
+
+Update user information (name, status).
+
+**Parameters**:
+- `userId` (required) - UUID of the user
+
+**Request Body**:
+```json
+{
+  "name": "Updated Name",
+  "status": "active"
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "user@example.com",
+  "name": "Updated Name",
+  "status": "active",
+  "is_super_admin": false,
+  "created_at": "2026-01-12T10:00:00Z"
+}
+```
+
+### Super Admin Delegation
+
+#### Promote User to Super Admin
+
+```
+POST /api/admin/users/:userId/promote
+```
+
+Grant super admin privileges to a user.
+
+**Parameters**:
+- `userId` (required) - UUID of the user to promote
+
+**Response** (200 OK):
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "user@example.com",
+  "name": "User Name",
+  "is_super_admin": true,
+  "super_admin_promoted_at": "2026-01-12T10:30:00Z",
+  "super_admin_promoted_by": "admin-user-id",
+  "created_at": "2026-01-12T10:00:00Z"
+}
+```
+
+**Errors**:
+- `403` - User is not a super admin (unauthorized)
+- `404` - User not found
+- `400` - User already super admin
+
+#### Demote Super Admin
+
+```
+POST /api/admin/users/:userId/demote
+```
+
+Revoke super admin privileges from a user (except last super admin).
+
+**Parameters**:
+- `userId` (required) - UUID of the super admin to demote
+
+**Response** (200 OK):
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "user@example.com",
+  "name": "User Name",
+  "is_super_admin": false,
+  "created_at": "2026-01-12T10:00:00Z"
+}
+```
+
+**Errors**:
+- `403` - User is not a super admin (unauthorized)
+- `404` - User not found
+- `400` - User is not a super admin
+- `409` - Cannot demote the last super admin
+
+### Audit Logging
+
+#### Query Audit Logs
+
+```
+GET /api/admin/audit-logs?limit=50&offset=0
+```
+
+View audit logs of all super admin actions.
+
+**Query Parameters**:
+- `limit` (optional) - Items per page, max 500, default 50
+- `offset` (optional) - Pagination offset, default 0
+
+**Response** (200 OK):
+```json
+{
+  "logs": [
+    {
+      "id": "990e8400-e29b-41d4-a716-446655440000",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "actor_type": "super_admin",
+      "entity_type": "user",
+      "entity_id": "aa0e8400-e29b-41d4-a716-446655440000",
+      "action": "promote",
+      "ip_address": "192.168.1.100",
+      "user_agent": "curl/7.68.0",
+      "result_status": "success",
+      "created_at": "2026-01-12T10:30:00Z"
+    }
+  ],
+  "limit": 50,
+  "offset": 0
+}
+```
 
 ---
 

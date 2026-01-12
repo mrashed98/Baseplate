@@ -193,6 +193,9 @@ make run            # Run server (hot reload via go run)
 make build          # Build binary to bin/server
 make clean          # Remove bin/ directory
 
+# Super Admin Setup
+make init-superadmin # Initialize first super admin (requires SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD env vars)
+
 # Code Quality
 make fmt            # Format code (go fmt)
 make lint           # Run linter (requires golangci-lint)
@@ -613,6 +616,100 @@ func setupTestDB(t *testing.T) *sql.DB {
 - **Naming**: `TestFunctionName_Scenario_ExpectedResult`
 - **Coverage**: Aim for 80%+ coverage on business logic
 - **Mocking**: Mock external dependencies (database, APIs)
+
+---
+
+## Super Admin Testing
+
+### Manual Testing Flow
+
+```bash
+# 1. Start database and app
+make db-up
+make run
+
+# 2. Create super admin
+export SUPER_ADMIN_EMAIL="admin@test.com"
+export SUPER_ADMIN_PASSWORD="AdminPass123"
+make init-superadmin
+
+# 3. Get JWT token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@test.com",
+    "password": "AdminPass123"
+  }' | jq -r '.token')
+
+# 4. Test super admin endpoints
+curl -X GET http://localhost:8080/api/admin/users \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5. Test promotion (promote a different user first)
+curl -s -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Test User",
+    "email": "test@example.com",
+    "password": "TestPass123"
+  }' | jq .
+
+# Get user ID from registration response, then promote
+USER_ID="<user-id-from-registration>"
+curl -X POST http://localhost:8080/api/admin/users/$USER_ID/promote \
+  -H "Authorization: Bearer $TOKEN"
+
+# 6. Test demotion
+curl -X POST http://localhost:8080/api/admin/users/$USER_ID/demote \
+  -H "Authorization: Bearer $TOKEN"
+
+# 7. Test audit logs
+curl -X GET "http://localhost:8080/api/admin/audit-logs?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN" | jq '.logs'
+```
+
+### Transaction Safety Testing
+
+```bash
+# Test that last super admin cannot be demoted:
+
+# 1. Get the super admin's user ID
+ADMIN_ID=$(curl -s -X GET http://localhost:8080/api/admin/users \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.users[] | select(.is_super_admin==true) | .id' | head -1)
+
+# 2. Attempt to demote (should fail with 409 Conflict)
+curl -X POST http://localhost:8080/api/admin/users/$ADMIN_ID/demote \
+  -H "Authorization: Bearer $TOKEN" \
+  -w "\nStatus: %{http_code}\n"
+
+# Expected: 409 Conflict with error "cannot demote the last super admin"
+```
+
+### Permission Bypass Testing
+
+```bash
+# Super admins can access resources without team membership:
+
+# 1. Create a team (as regular user)
+TOKEN_USER=$(curl -s -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Regular User",
+    "email": "user@example.com",
+    "password": "UserPass123"
+  }' | jq -r '.token')
+
+TEAM_ID=$(curl -s -X POST http://localhost:8080/api/teams \
+  -H "Authorization: Bearer $TOKEN_USER" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test Team", "slug": "test-team"}' | jq -r '.id')
+
+# 2. Super admin can access team without membership
+curl -X GET http://localhost:8080/api/admin/teams/$TEAM_ID \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected: 200 OK with team details (super admin bypasses membership check)
+```
 
 ---
 

@@ -82,13 +82,26 @@ make db-up
 
 Wait 3 seconds for migrations to complete.
 
-### 4. Run Baseplate
+### 4. Initialize Super Admin (Required)
+
+```bash
+# Set super admin credentials
+export SUPER_ADMIN_EMAIL="admin@example.com"
+export SUPER_ADMIN_PASSWORD="secure-password-here"
+
+# Create initial super admin
+make init-superadmin
+```
+
+This creates the first super admin user who can manage teams and other users.
+
+### 5. Run Baseplate
 
 ```bash
 make run
 ```
 
-### 5. Verify
+### 6. Verify
 
 ```bash
 curl http://localhost:8080/api/health
@@ -115,6 +128,8 @@ You're ready! See [API Documentation](./API.md) for usage.
 | `DB_NAME` | `baseplate` | PostgreSQL database | No |
 | `DB_SSL_MODE` | `disable` | PostgreSQL SSL mode | No |
 | `JWT_EXPIRATION_HOURS` | `24` | JWT token lifetime (hours) | No |
+| `SUPER_ADMIN_EMAIL` | - | Initial super admin email | **Yes (for init)** |
+| `SUPER_ADMIN_PASSWORD` | - | Initial super admin password | **Yes (for init)** |
 
 ### Configuration File (.env)
 
@@ -138,6 +153,10 @@ DB_SSL_MODE=disable
 
 # JWT
 JWT_EXPIRATION_HOURS=24
+
+# Super Admin Setup
+SUPER_ADMIN_EMAIL=admin@example.com
+SUPER_ADMIN_PASSWORD=secure-password-here
 ```
 
 **Load with**:
