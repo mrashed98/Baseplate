@@ -46,7 +46,7 @@ func Load() *Config {
 			SSLMode:  getEnv("DB_SSL_MODE", "disable"),
 		},
 		JWT: JWTConfig{
-			Secret:          getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+			Secret:          getEnv("JWT_SECRET", ""),
 			ExpirationHours: getEnvInt("JWT_EXPIRATION_HOURS", 24),
 		},
 	}
