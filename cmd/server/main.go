@@ -20,6 +20,11 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Validate critical configuration
+	if cfg.JWT.Secret == "" {
+		log.Fatalf("JWT_SECRET environment variable is required")
+	}
+
 	// Connect to database
 	db, err := postgres.NewClient(&cfg.Database)
 	if err != nil {
