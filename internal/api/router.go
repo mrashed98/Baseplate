@@ -15,6 +15,7 @@ type Router struct {
 	teamHandler      *handlers.TeamHandler
 	blueprintHandler *handlers.BlueprintHandler
 	entityHandler    *handlers.EntityHandler
+	adminHandler     *handlers.AdminHandler
 }
 
 func NewRouter(
@@ -23,6 +24,7 @@ func NewRouter(
 	teamHandler *handlers.TeamHandler,
 	blueprintHandler *handlers.BlueprintHandler,
 	entityHandler *handlers.EntityHandler,
+	adminHandler *handlers.AdminHandler,
 ) *Router {
 	return &Router{
 		authMiddleware:   middleware.NewAuthMiddleware(authService),
@@ -30,6 +32,7 @@ func NewRouter(
 		teamHandler:      teamHandler,
 		blueprintHandler: blueprintHandler,
 		entityHandler:    entityHandler,
+		adminHandler:     adminHandler,
 	}
 }
 
@@ -122,6 +125,14 @@ func (r *Router) setupRoutes() {
 			entities.GET("/:id", r.authMiddleware.RequirePermission(auth.PermEntityRead), r.entityHandler.Get)
 			entities.PUT("/:id", r.authMiddleware.RequirePermission(auth.PermEntityWrite), r.entityHandler.Update)
 			entities.DELETE("/:id", r.authMiddleware.RequirePermission(auth.PermEntityDelete), r.entityHandler.Delete)
+		}
+
+		// Admin routes (super admin only)
+		admin := protected.Group("/admin")
+		admin.Use(r.authMiddleware.RequireSuperAdmin())
+		{
+			admin.GET("/teams", r.adminHandler.ListTeams)
+			admin.GET("/teams/:teamId", r.adminHandler.GetTeamDetail)
 		}
 	}
 }

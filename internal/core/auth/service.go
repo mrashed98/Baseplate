@@ -35,8 +35,9 @@ func NewService(repo *Repository, cfg *config.JWTConfig) *Service {
 }
 
 type JWTClaims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Email  string    `json:"email"`
+	UserID       uuid.UUID `json:"user_id"`
+	Email        string    `json:"email"`
+	IsSuperAdmin *bool     `json:"is_super_admin,omitempty"` // Pointer for graceful degradation with old tokens
 	jwt.RegisteredClaims
 }
 
@@ -101,9 +102,11 @@ func (s *Service) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) 
 }
 
 func (s *Service) generateToken(user *User) (string, error) {
+	isSuperAdmin := user.IsSuperAdmin
 	claims := JWTClaims{
-		UserID: user.ID,
-		Email:  user.Email,
+		UserID:       user.ID,
+		Email:        user.Email,
+		IsSuperAdmin: &isSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.config.ExpirationDuration())),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -127,6 +130,11 @@ func (s *Service) ValidateToken(tokenString string) (*JWTClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+		// Graceful degradation: default missing is_super_admin claim to false for older tokens
+		if claims.IsSuperAdmin == nil {
+			falseValue := false
+			claims.IsSuperAdmin = &falseValue
+		}
 		return claims, nil
 	}
 	return nil, ErrUnauthorized
@@ -210,6 +218,10 @@ func (s *Service) GetTeam(ctx context.Context, id uuid.UUID) (*Team, error) {
 
 func (s *Service) GetTeamsByUser(ctx context.Context, userID uuid.UUID) ([]*Team, error) {
 	return s.repo.GetTeamsByUserID(ctx, userID)
+}
+
+func (s *Service) GetAllTeams(ctx context.Context) ([]*Team, error) {
+	return s.repo.GetAllTeams(ctx)
 }
 
 func (s *Service) UpdateTeam(ctx context.Context, team *Team) error {

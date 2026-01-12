@@ -1,4 +1,4 @@
-.PHONY: build run test clean db-up db-down db-reset migrate
+.PHONY: build run test clean db-up db-down db-reset migrate init-superadmin
 
 # Build the application
 build:
@@ -51,3 +51,7 @@ swagger:
 # Tidy dependencies
 tidy:
 	go mod tidy
+
+# Initialize super admin user
+init-superadmin:
+	go run ./cmd/init-superadmin

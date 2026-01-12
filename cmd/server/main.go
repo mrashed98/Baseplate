@@ -50,6 +50,7 @@ func main() {
 	teamHandler := handlers.NewTeamHandler(authService)
 	blueprintHandler := handlers.NewBlueprintHandler(blueprintService)
 	entityHandler := handlers.NewEntityHandler(entityService)
+	adminHandler := handlers.NewAdminHandler(authService)
 
 	// Setup router
 	router := api.NewRouter(
@@ -58,6 +59,7 @@ func main() {
 		teamHandler,
 		blueprintHandler,
 		entityHandler,
+		adminHandler,
 	)
 
 	engine := router.Setup(cfg.Server.Mode)

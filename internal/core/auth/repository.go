@@ -21,19 +21,21 @@ func NewRepository(db *postgres.Client) *Repository {
 // User methods
 func (r *Repository) CreateUser(ctx context.Context, user *User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, name, status)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (id, email, password_hash, name, status, is_super_admin, super_admin_promoted_at, super_admin_promoted_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at`
 	return r.db.DB.QueryRowContext(ctx, query,
 		user.ID, user.Email, user.PasswordHash, user.Name, user.Status,
+		user.IsSuperAdmin, user.SuperAdminPromotedAt, user.SuperAdminPromotedBy,
 	).Scan(&user.CreatedAt)
 }
 
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	query := `SELECT id, email, password_hash, name, status, created_at FROM users WHERE email = $1`
+	query := `SELECT id, email, password_hash, name, status, is_super_admin, super_admin_promoted_at, super_admin_promoted_by, created_at FROM users WHERE email = $1`
 	user := &User{}
 	err := r.db.DB.QueryRowContext(ctx, query, email).Scan(
-		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Status, &user.CreatedAt,
+		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Status,
+		&user.IsSuperAdmin, &user.SuperAdminPromotedAt, &user.SuperAdminPromotedBy, &user.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -42,15 +44,29 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 }
 
 func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
-	query := `SELECT id, email, password_hash, name, status, created_at FROM users WHERE id = $1`
+	query := `SELECT id, email, password_hash, name, status, is_super_admin, super_admin_promoted_at, super_admin_promoted_by, created_at FROM users WHERE id = $1`
 	user := &User{}
 	err := r.db.DB.QueryRowContext(ctx, query, id).Scan(
-		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Status, &user.CreatedAt,
+		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Status,
+		&user.IsSuperAdmin, &user.SuperAdminPromotedAt, &user.SuperAdminPromotedBy, &user.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return user, err
+}
+
+func (r *Repository) UpdateUser(ctx context.Context, user *User) error {
+	query := `
+		UPDATE users
+		SET email = $2, password_hash = $3, name = $4, status = $5,
+		    is_super_admin = $6, super_admin_promoted_at = $7, super_admin_promoted_by = $8
+		WHERE id = $1`
+	_, err := r.db.DB.ExecContext(ctx, query,
+		user.ID, user.Email, user.PasswordHash, user.Name, user.Status,
+		user.IsSuperAdmin, user.SuperAdminPromotedAt, user.SuperAdminPromotedBy,
+	)
+	return err
 }
 
 // Team methods
@@ -96,6 +112,25 @@ func (r *Repository) GetTeamsByUserID(ctx context.Context, userID uuid.UUID) ([]
 		WHERE tm.user_id = $1
 		ORDER BY t.created_at DESC`
 	rows, err := r.db.DB.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var teams []*Team
+	for rows.Next() {
+		team := &Team{}
+		if err := rows.Scan(&team.ID, &team.Name, &team.Slug, &team.CreatedAt); err != nil {
+			return nil, err
+		}
+		teams = append(teams, team)
+	}
+	return teams, rows.Err()
+}
+
+func (r *Repository) GetAllTeams(ctx context.Context) ([]*Team, error) {
+	query := `SELECT id, name, slug, created_at FROM teams ORDER BY created_at DESC`
+	rows, err := r.db.DB.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

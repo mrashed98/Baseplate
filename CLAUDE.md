@@ -71,3 +71,14 @@ DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 JWT_SECRET, JWT_EXPIRATION_HOURS
 SERVER_PORT, GIN_MODE
 ```
+
+## Development Reuqirements
+
+ALWAYS Update the docs at @docs directory with every change
+
+## Active Technologies
+- Go 1.25.1 + Gin (HTTP framework), golang-jwt/jwt/v5, lib/pq (PostgreSQL driver), golang.org/x/crypto (001-super-admin-role)
+- PostgreSQL 14+ with JSONB suppor (001-super-admin-role)
+
+## Recent Changes
+- 001-super-admin-role: Added Go 1.25.1 + Gin (HTTP framework), golang-jwt/jwt/v5, lib/pq (PostgreSQL driver), golang.org/x/crypto

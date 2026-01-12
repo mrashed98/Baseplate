@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	ContextUserID      = "user_id"
-	ContextTeamID      = "team_id"
-	ContextPermissions = "permissions"
+	ContextUserID       = "user_id"
+	ContextTeamID       = "team_id"
+	ContextPermissions  = "permissions"
+	ContextIsSuperAdmin = "is_super_admin"
 )
 
 type AuthMiddleware struct {
@@ -58,6 +59,14 @@ func (m *AuthMiddleware) handleJWT(c *gin.Context, token string) {
 	}
 
 	c.Set(ContextUserID, claims.UserID)
+
+	// Set is_super_admin flag in context
+	isSuperAdmin := false
+	if claims.IsSuperAdmin != nil && *claims.IsSuperAdmin {
+		isSuperAdmin = true
+	}
+	c.Set(ContextIsSuperAdmin, isSuperAdmin)
+
 	c.Next()
 }
 
@@ -109,13 +118,18 @@ func (m *AuthMiddleware) RequireTeam() gin.HandlerFunc {
 				return
 			}
 
-			permissions, err := m.authService.GetUserPermissions(c.Request.Context(), teamID, userUUID)
+			// Super admins bypass team membership checks and have all permissions
+			if IsSuperAdmin(c) {
+				c.Set(ContextPermissions, auth.AllPermissions)
+			} else {
+				permissions, err := m.authService.GetUserPermissions(c.Request.Context(), teamID, userUUID)
 
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "access denied"})
-				return
+				if err != nil {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "access denied"})
+					return
+				}
+				c.Set(ContextPermissions, permissions)
 			}
-			c.Set(ContextPermissions, permissions)
 		}
 
 		c.Set(ContextTeamID, teamID)
@@ -183,4 +197,28 @@ func GetPermissions(c *gin.Context) []string {
 	}
 
 	return nil
+}
+
+func IsSuperAdmin(c *gin.Context) bool {
+	val, exists := c.Get(ContextIsSuperAdmin)
+	if !exists {
+		return false
+	}
+
+	if isSuperAdmin, ok := val.(bool); ok {
+		return isSuperAdmin
+	}
+
+	return false
+}
+
+// RequireSuperAdmin middleware ensures user is a super admin
+func (m *AuthMiddleware) RequireSuperAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !IsSuperAdmin(c) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "super admin privileges required"})
+			return
+		}
+		c.Next()
+	}
 }

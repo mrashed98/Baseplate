@@ -7,12 +7,15 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	Name         string    `json:"name"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID                   uuid.UUID  `json:"id"`
+	Email                string     `json:"email"`
+	PasswordHash         string     `json:"-"`
+	Name                 string     `json:"name"`
+	Status               string     `json:"status"`
+	IsSuperAdmin         bool       `json:"is_super_admin"`
+	SuperAdminPromotedAt *time.Time `json:"super_admin_promoted_at,omitempty"`
+	SuperAdminPromotedBy *uuid.UUID `json:"super_admin_promoted_by,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
 }
 
 type Team struct {
@@ -86,6 +89,23 @@ type CreateAPIKeyRequest struct {
 type CreateAPIKeyResponse struct {
 	APIKey *APIKey `json:"api_key"`
 	Key    string  `json:"key"`
+}
+
+type AuditLog struct {
+	ID             uuid.UUID         `json:"id"`
+	TeamID         *uuid.UUID        `json:"team_id,omitempty"`
+	UserID         *uuid.UUID        `json:"user_id,omitempty"`
+	ActorType      string            `json:"actor_type"`
+	EntityType     string            `json:"entity_type"`
+	EntityID       string            `json:"entity_id"`
+	Action         string            `json:"action"`
+	OldData        map[string]any    `json:"old_data,omitempty"`
+	NewData        map[string]any    `json:"new_data,omitempty"`
+	IPAddress      *string           `json:"ip_address,omitempty"`
+	UserAgent      *string           `json:"user_agent,omitempty"`
+	ResultStatus   *string           `json:"result_status,omitempty"`
+	RequestContext map[string]any    `json:"request_context,omitempty"`
+	CreatedAt      time.Time         `json:"created_at"`
 }
 
 // Permission constants

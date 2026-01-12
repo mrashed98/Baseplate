@@ -8,3 +8,22 @@ server
 *.dll
 *.so
 *.dylib
+
+# Go
+*.out
+*.test
+vendor/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
