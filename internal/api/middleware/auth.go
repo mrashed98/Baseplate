@@ -134,7 +134,7 @@ func (m *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 		permissions, ok := perms.([]string)
 
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "invalid permession type"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "invalid permission type"})
 			return
 		}
 

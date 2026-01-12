@@ -78,6 +78,17 @@ func removeRequiredDeep(schema map[string]interface{}) map[string]interface{} {
 		}
 		if nestedMap, ok := v.(map[string]interface{}); ok {
 			result[k] = removeRequiredDeep(nestedMap)
+		} else if nestedArray, ok := v.([]interface{}); ok {
+			// Handle arrays (e.g., allOf, anyOf, oneOf, items)
+			cleanedArray := make([]interface{}, len(nestedArray))
+			for i, item := range nestedArray {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					cleanedArray[i] = removeRequiredDeep(itemMap)
+				} else {
+					cleanedArray[i] = item
+				}
+			}
+			result[k] = cleanedArray
 		} else {
 			result[k] = v
 		}

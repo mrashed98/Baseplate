@@ -336,7 +336,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, teamID uuid.UUID, userID *uu
 	if req.ExpiresAt != nil {
 		t, err := time.Parse(time.RFC3339, *req.ExpiresAt)
 		if err != nil {
-			return nil, fmt.Errorf("invlid expiration date format: %w", err)
+			return nil, fmt.Errorf("invalid expiration date format: %w", err)
 		}
 		expiresAt = &t
 	}
@@ -387,6 +387,6 @@ func (s *Service) GetAPIKeys(ctx context.Context, teamID uuid.UUID) ([]*APIKey, 
 	return s.repo.GetAPIKeysByTeamID(ctx, teamID)
 }
 
-func (s *Service) DeleteAPIKey(ctx context.Context, id uuid.UUID) error {
-	return s.repo.DeleteAPIKey(ctx, id)
+func (s *Service) DeleteAPIKey(ctx context.Context, teamID, id uuid.UUID) error {
+	return s.repo.DeleteAPIKey(ctx, teamID, id)
 }

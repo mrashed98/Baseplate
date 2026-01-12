@@ -308,8 +308,8 @@ func (r *Repository) UpdateAPIKeyLastUsed(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
-func (r *Repository) DeleteAPIKey(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM api_keys WHERE id = $1`
-	_, err := r.db.DB.ExecContext(ctx, query, id)
+func (r *Repository) DeleteAPIKey(ctx context.Context, teamID, id uuid.UUID) error {
+	query := `DELETE FROM api_keys WHERE id = $1 AND team_id = $2`
+	_, err := r.db.DB.ExecContext(ctx, query, id, teamID)
 	return err
 }

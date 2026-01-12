@@ -96,7 +96,7 @@ func (r *Router) setupRoutes() {
 		}
 
 		// API key deletion (not team-scoped in URL)
-		protected.DELETE("/api-keys/:keyId", r.teamHandler.DeleteAPIKey, r.authMiddleware.RequireTeam(), r.authMiddleware.RequirePermission(auth.PermTeamManage))
+		protected.DELETE("/api-keys/:keyId", r.authMiddleware.RequireTeam(), r.authMiddleware.RequirePermission(auth.PermTeamManage), r.teamHandler.DeleteAPIKey)
 
 		// Blueprints (team required via header or param)
 		blueprints := protected.Group("/blueprints")

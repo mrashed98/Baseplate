@@ -285,7 +285,7 @@ func (h *TeamHandler) CreateAPIKey(c *gin.Context) {
 }
 
 func (h *TeamHandler) DeleteAPIKey(c *gin.Context) {
-	_, ok := middleware.GetTeamID(c)
+	teamID, ok := middleware.GetTeamID(c)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "team id required"})
 		return
@@ -298,7 +298,7 @@ func (h *TeamHandler) DeleteAPIKey(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.DeleteAPIKey(c.Request.Context(), keyID); err != nil {
+	if err := h.authService.DeleteAPIKey(c.Request.Context(), teamID, keyID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
