@@ -31,5 +31,5 @@
 
 ## Notes
 
-- **Validation Complete**: All checklist items pass. FR-013 clarification resolved - initial super admin will be created via database migration during system setup.
+- **Validation Complete**: All checklist items pass. FR-013 clarification resolved - initial super admin is created via the `init-superadmin` CLI tool after database migration (not directly by the migration itself).
 - **Ready for Next Phase**: Specification is complete and ready for `/speckit.clarify` or `/speckit.plan`.

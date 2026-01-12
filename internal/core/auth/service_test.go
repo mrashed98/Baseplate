@@ -152,9 +152,9 @@ func TestPromoteToSuperAdmin_Unauthorized(t *testing.T) {
 		IsSuperAdmin: false,
 	}
 
-	// Should not allow non-super-admin to promote
-	if !actor.IsSuperAdmin {
-		t.Log("Correctly identified actor is not authorized to promote")
+	// Verify actor is not a super admin (precondition for ErrUnauthorized in service)
+	if actor.IsSuperAdmin {
+		t.Error("Actor should not be super admin - this is the precondition for ErrUnauthorized")
 	}
 }
 
@@ -234,10 +234,18 @@ func TestDemoteFromSuperAdmin_LastSuperAdmin(t *testing.T) {
 	}
 	mock.users[adminID] = admin
 
-	// Should prevent demotion when count <= 1
-	count, _ := mock.CountSuperAdminsForUpdate(context.Background(), nil)
-	if count <= 1 {
-		t.Log("Correctly blocked demotion of last super admin")
+	// Verify the count is 1 (precondition for ErrLastSuperAdmin)
+	count, err := mock.CountSuperAdminsForUpdate(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Failed to count super admins: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected exactly 1 super admin, got %d", count)
+	}
+
+	// Verify the condition that would trigger ErrLastSuperAdmin
+	if count > 1 {
+		t.Error("Demotion should be blocked when count <= 1, but count is greater than 1")
 	}
 }
 

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -51,7 +53,8 @@ func (h *AdminHandler) ListTeams(c *gin.Context) {
 
 	teams, err := h.authService.GetAllTeams(c.Request.Context(), limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list teams: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -73,7 +76,8 @@ func (h *AdminHandler) GetTeamDetail(c *gin.Context) {
 
 	team, err := h.authService.GetTeam(c.Request.Context(), teamID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to get team %s: %v", teamID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -103,7 +107,8 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 	users, err := h.authService.GetAllUsers(c.Request.Context(), limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list users: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -125,7 +130,8 @@ func (h *AdminHandler) GetUserDetail(c *gin.Context) {
 
 	user, memberships, err := h.authService.GetUserDetail(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to get user detail %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -157,7 +163,8 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 
 	user, err := h.authService.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to get user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -180,7 +187,8 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	}
 
 	if err := h.authService.UpdateUser(c.Request.Context(), user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to update user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -208,19 +216,20 @@ func (h *AdminHandler) PromoteUser(c *gin.Context) {
 
 	user, err := h.authService.PromoteToSuperAdmin(c.Request.Context(), actorID, userID, ipPtr, uaPtr)
 	if err != nil {
-		if err == auth.ErrUnauthorized {
+		if errors.Is(err, auth.ErrUnauthorized) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "only super admins can promote users"})
 			return
 		}
-		if err == auth.ErrNotFound {
+		if errors.Is(err, auth.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-		if err == auth.ErrAlreadySuperAdmin {
+		if errors.Is(err, auth.ErrAlreadySuperAdmin) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user is already a super admin"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to promote user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -248,23 +257,24 @@ func (h *AdminHandler) DemoteUser(c *gin.Context) {
 
 	user, err := h.authService.DemoteFromSuperAdmin(c.Request.Context(), actorID, userID, ipPtr, uaPtr)
 	if err != nil {
-		if err == auth.ErrUnauthorized {
+		if errors.Is(err, auth.ErrUnauthorized) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "only super admins can demote users"})
 			return
 		}
-		if err == auth.ErrNotFound {
+		if errors.Is(err, auth.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-		if err == auth.ErrNotSuperAdmin {
+		if errors.Is(err, auth.ErrNotSuperAdmin) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user is not a super admin"})
 			return
 		}
-		if err == auth.ErrLastSuperAdmin {
+		if errors.Is(err, auth.ErrLastSuperAdmin) {
 			c.JSON(http.StatusConflict, gin.H{"error": "cannot demote the last super admin"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to demote user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -289,7 +299,8 @@ func (h *AdminHandler) QueryAuditLogs(c *gin.Context) {
 
 	logs, err := h.authService.GetSuperAdminAuditLogs(c.Request.Context(), limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to query audit logs: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 

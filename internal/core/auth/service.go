@@ -161,15 +161,28 @@ func (s *Service) PromoteToSuperAdmin(ctx context.Context, actorID uuid.UUID, ta
 		"super_admin_promoted_by": target.SuperAdminPromotedBy,
 	}
 
-	// Update user
+	// Use transaction with conditional update to prevent race conditions
+	// The UPDATE only succeeds if is_super_admin is still false
+	tx, err := s.repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Conditional update: only promote if still not super admin
+	if err := s.repo.UpdateUserSuperAdminStatus(ctx, tx, targetUserID, true, &actorID); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// Update local target object to reflect changes
 	target.IsSuperAdmin = true
 	now := time.Now()
 	target.SuperAdminPromotedAt = &now
 	target.SuperAdminPromotedBy = &actorID
-
-	if err := s.repo.UpdateUser(ctx, target); err != nil {
-		return nil, err
-	}
 
 	// Create audit log
 	resultStatus := "success"
@@ -259,7 +272,7 @@ func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, t
 		return nil, err
 	}
 
-	// Fetch updated user
+	// Update local target object to reflect changes (no DB fetch needed)
 	target.IsSuperAdmin = false
 	target.SuperAdminPromotedAt = nil
 	target.SuperAdminPromotedBy = nil

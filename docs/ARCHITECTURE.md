@@ -214,12 +214,15 @@ graph LR
     L --> M_CHECK{Is Super Admin?}
     M_CHECK -->|Yes| N[Grant AllPermissions]
     M_CHECK -->|No| O[RequirePermission]
-    M_SUPER --> M_CHECK
 
-    N --> P[Handler]
+    M_SUPER --> M_SUPER_CHECK{Is Super Admin?}
+    M_SUPER_CHECK -->|Yes| P[Handler]
+    M_SUPER_CHECK -->|No| R[403 Forbidden]
+
+    N --> P
     O --> Q{Has Permission?}
     Q -->|Yes| P
-    Q -->|No| R[403 Forbidden]
+    Q -->|No| R
 
     P --> S[Response]
 ```

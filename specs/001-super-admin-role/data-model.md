@@ -163,11 +163,13 @@ stateDiagram-v2
 
 **Atomic Operation** (in transaction):
 1. Begin transaction with isolation level READ COMMITTED
-2. Execute `SELECT COUNT(*) FROM users WHERE is_super_admin = true FOR UPDATE`
+2. Execute `SELECT id FROM users WHERE is_super_admin = true FOR UPDATE` (count rows programmatically)
 3. If count <= 1 AND target = actor: abort with `ErrLastSuperAdmin`
 4. Update target user: `SET is_super_admin = false, super_admin_promoted_at = NULL, super_admin_promoted_by = NULL`
-5. Commit transaction
-6. Log demotion in audit_logs with `actor_type = 'super_admin'`, `action = 'demote'`
+5. Log demotion in audit_logs with `actor_type = 'super_admin'`, `action = 'demote'`
+6. Commit transaction
+
+**Note**: Audit logging is performed inside the transaction (step 5) to ensure atomicity. If the audit write fails, the entire demotion operation is rolled back, maintaining data integrity.
 
 **Postconditions**:
 - Target user loses platform-wide access

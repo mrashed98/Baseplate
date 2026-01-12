@@ -95,10 +95,22 @@ func (s *Service) DemoteFromSuperAdmin(ctx context.Context, requestingUserID, ta
     defer tx.Rollback()
 
     // Lock super admin users for counting
-    query := `SELECT COUNT(*) FROM users WHERE is_super_admin = true FOR UPDATE`
-    var count int
-    if err := tx.QueryRowContext(ctx, query).Scan(&count); err != nil {
+    // Note: PostgreSQL does not allow FOR UPDATE with aggregate functions (COUNT)
+    // We must select IDs first, then count programmatically
+    query := `SELECT id FROM users WHERE is_super_admin = true FOR UPDATE`
+    rows, err := tx.QueryContext(ctx, query)
+    if err != nil {
         return err
+    }
+    defer rows.Close()
+
+    count := 0
+    for rows.Next() {
+        var id uuid.UUID
+        if err := rows.Scan(&id); err != nil {
+            return err
+        }
+        count++
     }
 
     // Check if last super admin attempting self-demotion

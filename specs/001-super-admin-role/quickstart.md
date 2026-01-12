@@ -109,7 +109,7 @@ curl -X GET http://localhost:8080/api/admin/users \
 **Verify non-super-admin cannot access:**
 
 ```bash
-# First, create and login as regular user
+# First, create a regular user
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
@@ -118,9 +118,20 @@ curl -X POST http://localhost:8080/api/auth/register \
     "name": "Regular User"
   }'
 
+# Login as the regular user to get a token
+REGULAR_USER_RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123"
+  }')
+
+# Extract the token
+REGULAR_USER_TOKEN=$(echo $REGULAR_USER_RESPONSE | jq -r '.token')
+
 # Try to access admin endpoint (should fail with 403)
 curl -X GET http://localhost:8080/api/admin/users \
-  -H "Authorization: Bearer <regular-user-token>"
+  -H "Authorization: Bearer $REGULAR_USER_TOKEN"
 ```
 
 **Expected**: `403 Forbidden - Super admin access required`

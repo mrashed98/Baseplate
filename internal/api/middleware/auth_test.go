@@ -365,7 +365,8 @@ func TestSuperAdminCacheTTL_Value(t *testing.T) {
 
 func TestSuperAdminCache_Expiration(t *testing.T) {
 	// Use very short TTL for testing
-	cache := newSuperAdminCache(10 * time.Millisecond)
+	// Use 50ms TTL with 150ms sleep (3x margin) to avoid flakiness in CI
+	cache := newSuperAdminCache(50 * time.Millisecond)
 	userID := uuid.New()
 
 	cache.set(userID, true)
@@ -376,8 +377,8 @@ func TestSuperAdminCache_Expiration(t *testing.T) {
 		t.Error("Cache should contain entry immediately after set")
 	}
 
-	// Wait for expiration
-	time.Sleep(15 * time.Millisecond)
+	// Wait for expiration (3x TTL to ensure reliable expiration)
+	time.Sleep(150 * time.Millisecond)
 
 	// Should no longer be found
 	_, found = cache.get(userID)
