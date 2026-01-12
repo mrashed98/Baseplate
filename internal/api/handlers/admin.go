@@ -228,6 +228,35 @@ func (h *AdminHandler) DemoteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// QueryAuditLogs returns audit logs for super admin actions (super admin only)
+func (h *AdminHandler) QueryAuditLogs(c *gin.Context) {
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+	}
+
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	logs, err := h.authService.GetAuditLogs(c.Request.Context(), limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"logs":   logs,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
 type UpdateUserRequest struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`

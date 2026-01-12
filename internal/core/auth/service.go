@@ -212,6 +212,14 @@ func (s *Service) DemoteFromSuperAdmin(ctx context.Context, actorID uuid.UUID, t
 	return target, nil
 }
 
+func (s *Service) GetAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditLog, error) {
+	return s.repo.GetAuditLogs(ctx, limit, offset)
+}
+
+func (s *Service) CreateAuditLog(ctx context.Context, log *AuditLog) error {
+	return s.repo.CreateAuditLog(ctx, log)
+}
+
 func (s *Service) generateToken(user *User) (string, error) {
 	isSuperAdmin := user.IsSuperAdmin
 	claims := JWTClaims{

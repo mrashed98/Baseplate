@@ -42,6 +42,7 @@ func (r *Router) Setup(mode string) *gin.Engine {
 	r.engine.Use(gin.Recovery())
 	r.engine.Use(gin.Logger())
 	r.engine.Use(middleware.ErrorHandler())
+	r.engine.Use(middleware.AuditMiddleware())
 
 	r.setupRoutes()
 	return r.engine
@@ -141,6 +142,9 @@ func (r *Router) setupRoutes() {
 			admin.PUT("/users/:userId", r.adminHandler.UpdateUser)
 			admin.POST("/users/:userId/promote", r.adminHandler.PromoteUser)
 			admin.POST("/users/:userId/demote", r.adminHandler.DemoteUser)
+
+			// Audit logs
+			admin.GET("/audit-logs", r.adminHandler.QueryAuditLogs)
 		}
 	}
 }

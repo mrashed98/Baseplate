@@ -138,6 +138,94 @@ func (r *Repository) UpdateUserSuperAdminStatus(ctx context.Context, tx *sql.Tx,
 	return err
 }
 
+func (r *Repository) CreateAuditLog(ctx context.Context, log *AuditLog) error {
+	query := `
+		INSERT INTO audit_logs (id, team_id, user_id, actor_type, entity_type, entity_id, action, old_data, new_data, ip_address, user_agent, result_status, request_context)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		RETURNING created_at`
+
+	var oldDataJSON, newDataJSON, requestContextJSON []byte
+	if log.OldData != nil {
+		var err error
+		oldDataJSON, err = json.Marshal(log.OldData)
+		if err != nil {
+			return err
+		}
+	}
+	if log.NewData != nil {
+		var err error
+		newDataJSON, err = json.Marshal(log.NewData)
+		if err != nil {
+			return err
+		}
+	}
+	if log.RequestContext != nil {
+		var err error
+		requestContextJSON, err = json.Marshal(log.RequestContext)
+		if err != nil {
+			return err
+		}
+	}
+
+	return r.db.DB.QueryRowContext(ctx, query,
+		log.ID, log.TeamID, log.UserID, log.ActorType, log.EntityType, log.EntityID, log.Action,
+		oldDataJSON, newDataJSON, log.IPAddress, log.UserAgent, log.ResultStatus, requestContextJSON,
+	).Scan(&log.CreatedAt)
+}
+
+func (r *Repository) GetAuditLogs(ctx context.Context, limit int, offset int) ([]*AuditLog, error) {
+	query := `
+		SELECT id, team_id, user_id, actor_type, entity_type, entity_id, action, old_data, new_data, ip_address, user_agent, result_status, request_context, created_at
+		FROM audit_logs
+		WHERE actor_type = 'super_admin'
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2`
+
+	rows, err := r.db.DB.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*AuditLog
+	for rows.Next() {
+		log := &AuditLog{}
+		var oldDataJSON, newDataJSON, requestContextJSON sql.NullString
+
+		if err := rows.Scan(&log.ID, &log.TeamID, &log.UserID, &log.ActorType, &log.EntityType, &log.EntityID, &log.Action,
+			&oldDataJSON, &newDataJSON, &log.IPAddress, &log.UserAgent, &log.ResultStatus, &requestContextJSON, &log.CreatedAt); err != nil {
+			return nil, err
+		}
+
+		if oldDataJSON.Valid {
+			var data map[string]any
+			if err := json.Unmarshal([]byte(oldDataJSON.String), &data); err != nil {
+				return nil, err
+			}
+			log.OldData = data
+		}
+
+		if newDataJSON.Valid {
+			var data map[string]any
+			if err := json.Unmarshal([]byte(newDataJSON.String), &data); err != nil {
+				return nil, err
+			}
+			log.NewData = data
+		}
+
+		if requestContextJSON.Valid {
+			var data map[string]any
+			if err := json.Unmarshal([]byte(requestContextJSON.String), &data); err != nil {
+				return nil, err
+			}
+			log.RequestContext = data
+		}
+
+		logs = append(logs, log)
+	}
+	return logs, rows.Err()
+}
+
 // Team methods
 func (r *Repository) CreateTeam(ctx context.Context, team *Team) error {
 	query := `
